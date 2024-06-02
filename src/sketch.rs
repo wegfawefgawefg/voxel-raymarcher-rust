@@ -1,9 +1,11 @@
-use glam::{Vec2, Vec3};
+use std::vec;
+
+use glam::{UVec3, Vec2, Vec3};
 use raylib::prelude::*;
 
 use crate::camera::Camera;
 use crate::viewplane::Viewplane;
-use crate::world::World;
+use crate::world::{GetVoxelResult, World, CHUNK_SIZE};
 use crate::UP;
 use crate::{DIMS, MARCH_STEP_SIZE, NUM_RAY_STEPS};
 
@@ -24,11 +26,12 @@ pub struct State {
     pub viewplane: Box<Viewplane>,
 
     pub mode: Mode,
+    pub chunks_to_generate: Vec<UVec3>,
 }
 
 impl State {
     pub fn new() -> Self {
-        let mut world = Box::new(World::new(8));
+        let mut world = Box::new(World::new(512));
         world.gen_floor(Vec3::new(255.0, 255.0, 255.0));
         world.gen_cube(
             Vec3::new(1.0, world.get_above_floor_level() as f32 - 1.0, 1.0),
@@ -79,8 +82,16 @@ impl State {
         //     Vec3::new(255.0, 255.0, 255.0),
         // );
 
+        // for every chunk in dim call world.gen_terrain with the chunk_pos
+        // let chunk_dims = world.dim / CHUNK_SIZE;
+        // for x in 0..chunk_dims {
+        //     for z in 0..chunk_dims {
+        //         world.gen_terrain(UVec3::new(x as u32, 0, z as u32));
+        //     }
+        // }
+
         let camera = Box::new(Camera::new(
-            Vec3::new(0.0, 2.4, 0.0),
+            Vec3::new(0.0, world.get_above_floor_level() as f32, 0.0),
             Vec3::new(0.0, 0.0, -1.0),
             3.0,
         ));
@@ -96,6 +107,7 @@ impl State {
             viewplane,
 
             mode: Mode::Orbit,
+            chunks_to_generate: Vec::new(),
         }
     }
 }
@@ -211,7 +223,9 @@ pub fn step(rl: &mut RaylibHandle, rlt: &mut RaylibThread, state: &mut State) {
     );
 }
 
-pub fn draw_voxels(state: &State, d: &mut RaylibTextureMode<RaylibDrawHandle>) {
+pub fn draw_voxels(state: &State, d: &mut RaylibTextureMode<RaylibDrawHandle>) -> Vec<UVec3> {
+    let mut chunks_to_generate: Vec<UVec3> = vec![];
+
     let mut x: usize = 0;
     let mut y: usize = 0;
     for target in state.viewplane.get_targets(&state.camera, DIMS.as_vec2()) {
@@ -223,15 +237,23 @@ pub fn draw_voxels(state: &State, d: &mut RaylibTextureMode<RaylibDrawHandle>) {
         let mut voxel: Option<Vec3> = None;
         for _ in 0..NUM_RAY_STEPS {
             pos += ray * MARCH_STEP_SIZE;
-            let pos_in_world_space = pos - state.world.pos;
-            let wp = pos_in_world_space.floor();
+            let wp = pos.floor(); // remove the decimal part
             if state.world.is_in_bounds(wp) {
-                let cell = state.world.voxels[wp.x as usize][wp.y as usize][wp.z as usize];
-                if cell.is_some() {
-                    hit = true;
-                    dist_to_hit = (pos - state.camera.pos).length();
-                    voxel = cell;
-                    break;
+                let get_voxel_result = state.world.get_voxel(wp);
+                match get_voxel_result {
+                    GetVoxelResult::Voxel { color: v } => {
+                        hit = true;
+                        dist_to_hit = (pos - state.camera.pos).length();
+                        voxel = Some(v);
+                        break;
+                    }
+                    GetVoxelResult::ChunkNotGenerated => {
+                        let chunk_pos = state.world.to_chunk_pos(wp);
+                        if !chunks_to_generate.contains(&chunk_pos) {
+                            chunks_to_generate.push(chunk_pos);
+                        }
+                    }
+                    GetVoxelResult::NoVoxel => {}
                 }
             }
         }
@@ -247,6 +269,13 @@ pub fn draw_voxels(state: &State, d: &mut RaylibTextureMode<RaylibDrawHandle>) {
                     255,
                 );
             }
+        } else {
+            // if the position is above the floor level, color it blue
+            if pos.y < state.world.get_above_floor_level() as f32 {
+                const BLUE: Vec3 = Vec3::new(0.0, 0.0, 255.0);
+                let blue = BLUE * 0.1;
+                color = Color::new(blue.x as u8, blue.y as u8, blue.z as u8, 255);
+            }
         }
         d.draw_rectangle(x as i32, y as i32, 1, 1, color);
 
@@ -256,17 +285,18 @@ pub fn draw_voxels(state: &State, d: &mut RaylibTextureMode<RaylibDrawHandle>) {
             y += 1;
         }
     }
+
+    chunks_to_generate
 }
 
 pub fn draw_map(state: &State, d: &mut RaylibTextureMode<RaylibDrawHandle>) {
     let map_offset = Vec2::new(state.world.get_center().x, state.world.get_center().z);
     let map_offset = map_offset + Vec2::new(5.0, 5.0);
-    let map_scale = 2.0;
+    let map_scale = 1.0;
 
     // draw world bounds
     let world_size = Vec2::new(state.world.dim as f32, state.world.dim as f32) * map_scale;
-    let world_pos =
-        Vec2::new(state.world.pos.x, state.world.pos.z) * map_scale + map_offset * map_scale;
+    let world_pos = Vec2::ZERO + map_offset * map_scale;
     d.draw_rectangle(
         world_pos.x as i32,
         world_pos.y as i32,
@@ -320,12 +350,13 @@ pub fn draw_map(state: &State, d: &mut RaylibTextureMode<RaylibDrawHandle>) {
     );
 }
 
-pub fn draw(state: &State, d: &mut RaylibTextureMode<RaylibDrawHandle>) {
+pub fn draw(state: &State, d: &mut RaylibTextureMode<RaylibDrawHandle>) -> Vec<UVec3> {
     d.draw_text("Voxels", 12, 12, 12, Color::WHITE);
 
-    draw_voxels(state, d);
-    draw_map(state, d);
+    let chunks_to_generate = draw_voxels(state, d);
+    // draw_map(state, d);
 
     let mouse_pos = d.get_mouse_position();
     d.draw_circle(mouse_pos.x as i32, mouse_pos.y as i32, 6.0, Color::GREEN);
+    chunks_to_generate
 }

@@ -1,4 +1,6 @@
-use glam::{IVec2, UVec2, Vec3};
+use std::collections::HashSet;
+
+use glam::{IVec2, UVec2, UVec3, Vec3};
 use raylib::prelude::*;
 use raylib::{ffi::SetTraceLogLevel, prelude::TraceLogLevel};
 
@@ -8,8 +10,8 @@ mod viewplane;
 mod world;
 
 const TIMESTEP: f32 = 1.0 / sketch::FRAMES_PER_SECOND as f32;
-const DIMS: UVec2 = UVec2::new(240, 160);
-const NUM_RAY_STEPS: i32 = 64;
+const DIMS: UVec2 = UVec2::new(240 / 2, 160 / 2);
+const NUM_RAY_STEPS: i32 = 256;
 const MARCH_STEP_SIZE: f32 = 0.2;
 const UP: Vec3 = Vec3::new(0.0, -1.0, 0.0);
 
@@ -48,6 +50,17 @@ fn main() {
             state.time_since_last_update -= TIMESTEP;
 
             sketch::step(&mut rl, &mut rlt, &mut state);
+
+            // if theres any chunks to generate, generate them
+            // dont generate duplicates with a set
+            let mut already_generated_chunks: HashSet<UVec3> = HashSet::new();
+            for chunk_pos in state.chunks_to_generate.iter() {
+                if !already_generated_chunks.contains(chunk_pos) {
+                    state.world.gen_terrain(*chunk_pos);
+                    already_generated_chunks.insert(*chunk_pos);
+                }
+            }
+            state.chunks_to_generate.clear();
         }
 
         let mut draw_handle = rl.begin_drawing(&rlt);
@@ -55,7 +68,9 @@ fn main() {
             let low_res_draw_handle =
                 &mut draw_handle.begin_texture_mode(&rlt, &mut render_texture);
             low_res_draw_handle.clear_background(Color::BLACK);
-            sketch::draw(&state, low_res_draw_handle);
+            let chunks_to_generate = sketch::draw(&state, low_res_draw_handle);
+            state.chunks_to_generate.clear();
+            state.chunks_to_generate.extend(chunks_to_generate);
         }
         scale_and_blit_render_texture_to_window(
             &mut draw_handle,

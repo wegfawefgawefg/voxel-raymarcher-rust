@@ -1,4 +1,9 @@
+use std::collections::HashMap;
+
+use glam::UVec3;
 use glam::Vec3;
+use noise::{NoiseFn, Perlin};
+use rand::Rng;
 
 #[derive(Debug, Clone)]
 pub struct Object {
@@ -7,22 +12,95 @@ pub struct Object {
     pub color: Vec3,
 }
 
+// define chunk type
+type Chunk = Vec<Vec<Vec<Option<Vec3>>>>;
+pub const CHUNK_SIZE: usize = 16;
+
 #[derive(Debug)]
 pub struct World {
     pub dim: usize,
-    pub pos: Vec3,
-    pub voxels: Vec<Vec<Vec<Option<Vec3>>>>,
+    pub chunk_dim: usize,
+    pub chunks: HashMap<UVec3, Option<Chunk>>,
     pub genned_objects: Vec<Object>,
+}
+
+pub enum GetVoxelResult {
+    Voxel { color: Vec3 },
+    NoVoxel,
+    ChunkNotGenerated,
 }
 
 impl World {
     pub fn new(dim: usize) -> Self {
         Self {
             dim,
-            // pos: Vec3::new(dim as f32 / 2.0, dim as f32 / 2.0, dim as f32 / 2.0),
-            pos: Vec3::new(0.0, 0.0, 0.0),
-            voxels: Self::gen_empty_voxel_array(dim),
+            chunk_dim: dim / CHUNK_SIZE,
+            chunks: HashMap::new(),
             genned_objects: Vec::new(),
+        }
+    }
+
+    pub fn to_chunk_pos(&self, pos: Vec3) -> UVec3 {
+        UVec3::new(
+            (pos.x / CHUNK_SIZE as f32).floor() as u32,
+            (pos.y / CHUNK_SIZE as f32).floor() as u32,
+            (pos.z / CHUNK_SIZE as f32).floor() as u32,
+        )
+    }
+
+    pub fn get_chunk_world_pos(&self, chunk_pos: UVec3) -> Vec3 {
+        Vec3::new(
+            chunk_pos.x as f32 * CHUNK_SIZE as f32,
+            chunk_pos.y as f32 * CHUNK_SIZE as f32,
+            chunk_pos.z as f32 * CHUNK_SIZE as f32,
+        )
+    }
+
+    pub fn get_voxel(&self, pos: Vec3) -> GetVoxelResult {
+        if !self.is_in_bounds(pos) {
+            return GetVoxelResult::NoVoxel;
+        }
+        let chunk_pos = self.to_chunk_pos(pos);
+
+        // Check if there's an entry in the dictionary for the chunk
+        if let Some(chunk) = self.chunks.get(&chunk_pos) {
+            let pos_in_chunk = pos.as_uvec3() - self.get_chunk_world_pos(chunk_pos).as_uvec3();
+            if let Some(chunk) = chunk {
+                if let Some(color) =
+                    chunk[pos_in_chunk.x as usize][pos_in_chunk.y as usize][pos_in_chunk.z as usize]
+                {
+                    return GetVoxelResult::Voxel { color };
+                } else {
+                    return GetVoxelResult::NoVoxel;
+                }
+            }
+        } else {
+            return GetVoxelResult::ChunkNotGenerated;
+        }
+        GetVoxelResult::NoVoxel
+    }
+
+    pub fn set_voxel(&mut self, pos: Vec3, color: Vec3) {
+        if !self.is_in_bounds(pos) {
+            return;
+        }
+        let chunk_pos = self.to_chunk_pos(pos);
+        let pos_in_chunk = pos.as_uvec3()
+            - chunk_pos * UVec3::new(CHUNK_SIZE as u32, CHUNK_SIZE as u32, CHUNK_SIZE as u32);
+
+        if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
+            if let Some(chunk) = chunk {
+                // If the chunk exists, set the voxel
+                chunk[pos_in_chunk.x as usize][pos_in_chunk.y as usize][pos_in_chunk.z as usize] =
+                    Some(color);
+            }
+        } else {
+            println!("Creating new chunk");
+            // If the chunk does not exist, create it and set the voxel
+            let mut new_chunk = Self::gen_empty_voxel_array(CHUNK_SIZE);
+            new_chunk[pos_in_chunk.x as usize][pos_in_chunk.y as usize][pos_in_chunk.z as usize] =
+                Some(color);
+            self.chunks.insert(chunk_pos, Some(new_chunk));
         }
     }
 
@@ -44,7 +122,8 @@ impl World {
     }
 
     pub fn reset(&mut self) {
-        self.voxels = Self::gen_empty_voxel_array(self.dim);
+        self.genned_objects.clear();
+        self.chunks.clear();
     }
 
     pub fn gen_empty_voxel_array(dim: usize) -> Vec<Vec<Vec<Option<Vec3>>>> {
@@ -56,10 +135,7 @@ impl World {
             for y in 0..size.y as usize {
                 for z in 0..size.z as usize {
                     let voxel_pos = pos + Vec3::new(x as f32, y as f32, z as f32);
-                    if self.is_in_bounds(voxel_pos) {
-                        self.voxels[pos.x as usize + x][pos.y as usize + y][pos.z as usize + z] =
-                            Some(block);
-                    }
+                    self.set_voxel(voxel_pos, block);
                 }
             }
         }
@@ -78,8 +154,7 @@ impl World {
                     if Vec3::new(x as f32, y as f32, z as f32).length() <= radius as f32 {
                         let voxel_pos = pos + Vec3::new(x as f32, y as f32, z as f32);
                         if self.is_in_bounds(voxel_pos) {
-                            self.voxels[pos.x as usize + x as usize][pos.y as usize + y as usize]
-                                [pos.z as usize + z as usize] = Some(block);
+                            self.set_voxel(voxel_pos, block);
                         }
                     }
                 }
@@ -96,6 +171,116 @@ impl World {
         });
     }
 
+    pub fn get_lower_void(&self) -> usize {
+        self.dim - 1
+    }
+
+    pub fn gen_sin_terrain(&mut self, chunk_pos: UVec3) {
+        // skip if the chunk is already generated
+        if self.chunks.contains_key(&chunk_pos) {
+            return;
+        }
+
+        // Convert chunk position to block position
+        let base_pos = Vec3::new(
+            chunk_pos.x as f32 * CHUNK_SIZE as f32,
+            self.get_floor_level() as f32, // Start from the floor level
+            chunk_pos.z as f32 * CHUNK_SIZE as f32,
+        );
+        // let mut rng = rand::thread_rng();
+        // Generate terrain within the chunk
+        let frequency = std::f32::consts::PI * 2.0 / CHUNK_SIZE as f32; // one period per chunk
+        for x in 0..CHUNK_SIZE {
+            for z in 0..CHUNK_SIZE {
+                // World position of the current voxel
+                let world_x = base_pos.x + x as f32;
+                let world_z = base_pos.z + z as f32;
+
+                let y_offset =
+                    (world_x * frequency).sin() * 2.0 + (world_z * frequency).cos() * 2.0;
+                let mut world_y = base_pos.y + y_offset;
+
+                // set the block green, and all blocks down to the floor brown
+                let gentle_green = Vec3::new(56.0, 183.0, 100.0);
+                // const RANDOM_DELTA_MAG: f32 = 10.0;
+                // let random_delta_r = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
+                // let random_delta_g = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
+                // let random_delta_b = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
+                // let grass_color =
+                //     gentle_green + Vec3::new(random_delta_r, random_delta_g, random_delta_b);
+                self.set_voxel(Vec3::new(world_x, world_y, world_z), gentle_green);
+
+                // fill to the floor with brown
+                let brown = Vec3::new(122.0, 72.0, 65.0);
+                // let random_delta_r = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
+                // let random_delta_g = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
+                // let random_delta_b = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
+                // let dirt_color = brown + Vec3::new(random_delta_r, random_delta_g, random_delta_b);
+                world_y += 1.0;
+                while world_y < self.get_lower_void() as f32 {
+                    self.set_voxel(Vec3::new(world_x, world_y, world_z), brown);
+                    world_y += 1.0;
+                }
+            }
+        }
+    }
+
+    pub fn gen_terrain(&mut self, chunk_pos: UVec3) {
+        // Skip if the chunk is already generated
+        if self.chunks.contains_key(&chunk_pos) {
+            return;
+        }
+
+        // Convert chunk position to block position
+        let base_pos = Vec3::new(
+            chunk_pos.x as f32 * CHUNK_SIZE as f32,
+            self.get_floor_level() as f32, // Start from the floor level
+            chunk_pos.z as f32 * CHUNK_SIZE as f32,
+        );
+
+        // Initialize Perlin noise generator
+        let perlin = Perlin::new(0);
+
+        // Random number generator
+        let mut rng = rand::thread_rng();
+
+        // Generate terrain within the chunk
+        let scale = 0.1; // Scale factor for Perlin noise
+        for x in 0..CHUNK_SIZE {
+            for z in 0..CHUNK_SIZE {
+                // World position of the current voxel
+                let world_x = base_pos.x + x as f32;
+                let world_z = base_pos.z + z as f32;
+
+                // Calculate height using Perlin noise
+                let y_offset = perlin.get([world_x as f64 * scale, world_z as f64 * scale]) * 10.0;
+                let world_y = base_pos.y + y_offset as f32;
+
+                // Set the block green, and all blocks down to the floor brown
+                let gentle_green = Vec3::new(56.0, 183.0, 100.0);
+                const RANDOM_DELTA_MAG: f32 = 10.0;
+                let random_delta_r = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
+                let random_delta_g = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
+                let random_delta_b = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
+                let grass_color =
+                    gentle_green + Vec3::new(random_delta_r, random_delta_g, random_delta_b);
+                self.set_voxel(Vec3::new(world_x, world_y, world_z), grass_color);
+
+                // Fill to the floor with brown
+                let brown = Vec3::new(122.0, 72.0, 65.0);
+                let random_delta_r = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
+                let random_delta_g = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
+                let random_delta_b = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
+                let dirt_color = brown + Vec3::new(random_delta_r, random_delta_g, random_delta_b);
+                let mut y = world_y + 1.0;
+                while y < self.get_lower_void() as f32 {
+                    self.set_voxel(Vec3::new(world_x, y, world_z), dirt_color);
+                    y += 1.0;
+                }
+            }
+        }
+    }
+
     pub fn get_floor_level(&self) -> usize {
         self.dim - 1
     }
@@ -108,7 +293,7 @@ impl World {
         let floor_level = self.get_floor_level();
         for x in 0..self.dim {
             for z in 0..self.dim {
-                self.voxels[x][floor_level][z] = Some(block);
+                self.set_voxel(Vec3::new(x as f32, floor_level as f32, z as f32), block);
             }
         }
     }
