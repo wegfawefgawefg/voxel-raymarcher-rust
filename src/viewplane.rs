@@ -40,26 +40,4 @@ impl Viewplane {
             panic!("Aspect ratio {} does not match {}", aspect_ratio, ratio);
         }
     }
-
-    pub fn get_targets(&self, camera: &Camera, resolution: Vec2) -> Vec<Vec3> {
-        let mut targets = Vec::new();
-
-        let tl = self.top_left_corner_from_perspective_of(camera);
-        let right = self.get_right_from_perspective_of(camera);
-        let down = self.get_down_from_perspective_of(camera);
-        let pixel_size = self.size / resolution;
-        let half_pixel = pixel_size / 2.0;
-        let mut t = tl + right * half_pixel.x + down * half_pixel.y;
-
-        for _ in 0..resolution.y as usize {
-            let row_start = t;
-            for _ in 0..resolution.x as usize {
-                targets.push(t);
-                t += right * pixel_size.x;
-            }
-            t = row_start + down * pixel_size.y;
-        }
-
-        targets
-    }
 }

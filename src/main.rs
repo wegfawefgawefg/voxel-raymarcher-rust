@@ -11,13 +11,14 @@ mod world;
 
 const TIMESTEP: f32 = 1.0 / sketch::FRAMES_PER_SECOND as f32;
 const DIMS: UVec2 = UVec2::new(240 / 2, 160 / 2);
-const NUM_RAY_STEPS: i32 = 256;
+const NUM_RAY_STEPS: i32 = 128;
 const MARCH_STEP_SIZE: f32 = 0.2;
 const UP: Vec3 = Vec3::new(0.0, -1.0, 0.0);
+const CHUNK_GEN_RADIUS: i32 = 1;
 
 fn main() {
     let mut state = sketch::State::new();
-    let (mut rl, mut rlt) = raylib::init().title("Voxels").build();
+    let (mut rl, rlt) = raylib::init().title("Voxels").build();
     unsafe {
         SetTraceLogLevel(TraceLogLevel::LOG_WARNING as i32);
     }
@@ -49,7 +50,7 @@ fn main() {
         while state.time_since_last_update > TIMESTEP {
             state.time_since_last_update -= TIMESTEP;
 
-            sketch::step(&mut rl, &mut rlt, &mut state);
+            sketch::step(&mut rl, &mut state);
 
             // if theres any chunks to generate, generate them
             // dont generate duplicates with a set

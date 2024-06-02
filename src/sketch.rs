@@ -5,7 +5,7 @@ use raylib::prelude::*;
 
 use crate::camera::Camera;
 use crate::viewplane::Viewplane;
-use crate::world::{GetVoxelResult, World, CHUNK_SIZE};
+use crate::world::{Block, GetVoxelResult, World};
 use crate::UP;
 use crate::{DIMS, MARCH_STEP_SIZE, NUM_RAY_STEPS};
 
@@ -32,16 +32,16 @@ pub struct State {
 impl State {
     pub fn new() -> Self {
         let mut world = Box::new(World::new(512));
-        world.gen_floor(Vec3::new(255.0, 255.0, 255.0));
+        world.gen_floor(Block::new(255, 255, 255, 255));
         world.gen_cube(
             Vec3::new(1.0, world.get_above_floor_level() as f32 - 1.0, 1.0),
             Vec3::new(1.0, 2.0, 1.0),
-            Vec3::new(255.0, 0.0, 0.0),
+            Block::new(255, 0, 0, 255),
         );
 
         // put a cube in the 4 corners
         // white
-        let cube_color = Vec3::new(255.0, 255.0, 255.0);
+        let cube_color = Block::new(255, 255, 255, 255);
         world.gen_cube(
             Vec3::new(0.0, world.get_above_floor_level() as f32 - 1.0, 0.0),
             Vec3::new(1.0, 1.0, 1.0),
@@ -172,6 +172,14 @@ pub fn process_events_and_input(rl: &mut RaylibHandle, state: &mut State) {
         state.camera.rotate(UP, -rotation_speed);
     }
 
+    // y and h to move the view angle up and down
+    if rl.is_key_down(raylib::consts::KeyboardKey::KEY_Y) {
+        state.camera.dir.y += rotation_speed;
+    }
+    if rl.is_key_down(raylib::consts::KeyboardKey::KEY_H) {
+        state.camera.dir.y -= rotation_speed;
+    }
+
     // t and g to move the viewplane forward and backward
     if rl.is_key_down(raylib::consts::KeyboardKey::KEY_T) {
         state.camera.viewplane_distance -= cam_speed;
@@ -181,7 +189,7 @@ pub fn process_events_and_input(rl: &mut RaylibHandle, state: &mut State) {
     }
 }
 
-pub fn step(rl: &mut RaylibHandle, rlt: &mut RaylibThread, state: &mut State) {
+pub fn step(rl: &mut RaylibHandle, state: &mut State) {
     // global mode
     // if mode == Mode.ORBIT:
     //     tm = 1.0
@@ -226,64 +234,70 @@ pub fn step(rl: &mut RaylibHandle, rlt: &mut RaylibThread, state: &mut State) {
 pub fn draw_voxels(state: &State, d: &mut RaylibTextureMode<RaylibDrawHandle>) -> Vec<UVec3> {
     let mut chunks_to_generate: Vec<UVec3> = vec![];
 
-    let mut x: usize = 0;
-    let mut y: usize = 0;
-    for target in state.viewplane.get_targets(&state.camera, DIMS.as_vec2()) {
-        let ray = target - state.camera.pos;
-        let ray = ray.normalize();
-        let mut hit = false;
-        let mut dist_to_hit = NUM_RAY_STEPS as f32 * MARCH_STEP_SIZE; // starts at max
-        let mut pos = state.camera.pos;
-        let mut voxel: Option<Vec3> = None;
-        for _ in 0..NUM_RAY_STEPS {
-            pos += ray * MARCH_STEP_SIZE;
-            let wp = pos.floor(); // remove the decimal part
-            if state.world.is_in_bounds(wp) {
-                let get_voxel_result = state.world.get_voxel(wp);
-                match get_voxel_result {
-                    GetVoxelResult::Voxel { color: v } => {
-                        hit = true;
-                        dist_to_hit = (pos - state.camera.pos).length();
-                        voxel = Some(v);
-                        break;
-                    }
-                    GetVoxelResult::ChunkNotGenerated => {
-                        let chunk_pos = state.world.to_chunk_pos(wp);
-                        if !chunks_to_generate.contains(&chunk_pos) {
-                            chunks_to_generate.push(chunk_pos);
+    let tl = state
+        .viewplane
+        .top_left_corner_from_perspective_of(&state.camera);
+    let right = state.viewplane.get_right_from_perspective_of(&state.camera);
+    let down = state.viewplane.get_down_from_perspective_of(&state.camera);
+    let pixel_size = state.viewplane.size / DIMS.as_vec2();
+    let half_pixel = pixel_size / 2.0;
+    let mut target = tl + right * half_pixel.x + down * half_pixel.y;
+    let resolution = DIMS.as_vec2();
+
+    for y in 0..resolution.y as usize {
+        let row_start = target;
+        for x in 0..resolution.x as usize {
+            target += right * pixel_size.x;
+            let ray = (target - state.camera.pos).normalize();
+            let mut hit = false;
+            let mut dist_to_hit = NUM_RAY_STEPS as f32 * MARCH_STEP_SIZE; // starts at max
+            let mut pos = state.camera.pos;
+            let mut voxel: Option<Block> = None;
+            for _ in 0..NUM_RAY_STEPS {
+                pos += ray * MARCH_STEP_SIZE;
+                let wp = pos.floor(); // remove the decimal part
+                if state.world.is_in_bounds(wp) {
+                    let get_voxel_result = state.world.get_voxel(wp);
+                    match get_voxel_result {
+                        GetVoxelResult::Voxel { block } => {
+                            hit = true;
+                            dist_to_hit = (pos - state.camera.pos).length();
+                            voxel = Some(block);
+                            break;
                         }
+                        GetVoxelResult::ChunkNotGenerated => {
+                            let chunk_pos = state.world.to_chunk_pos(wp);
+                            if !chunks_to_generate.contains(&chunk_pos) {
+                                chunks_to_generate.push(chunk_pos);
+                            }
+                        }
+                        GetVoxelResult::NoVoxel => {}
                     }
-                    GetVoxelResult::NoVoxel => {}
                 }
             }
-        }
-        let mut color = Color::BLACK;
-        if hit {
-            let mut brightness = 1.0 - dist_to_hit / (NUM_RAY_STEPS as f32 * MARCH_STEP_SIZE);
-            brightness = brightness.max(0.0).min(1.0);
-            if let Some(voxel) = voxel {
-                color = Color::new(
-                    (voxel.x * brightness) as u8,
-                    (voxel.y * brightness) as u8,
-                    (voxel.z * brightness) as u8,
-                    255,
-                );
+            let mut color = Color::BLACK;
+            if hit {
+                let mut brightness = 1.0 - dist_to_hit / (NUM_RAY_STEPS as f32 * MARCH_STEP_SIZE);
+                brightness = brightness.max(0.0).min(1.0);
+                if let Some(voxel) = voxel {
+                    color = Color::new(
+                        (voxel.r as f32 * brightness) as u8,
+                        (voxel.g as f32 * brightness) as u8,
+                        (voxel.b as f32 * brightness) as u8,
+                        255,
+                    );
+                }
+            } else {
+                // if the position is above the floor level, color it blue
+                if pos.y < state.world.get_above_floor_level() as f32 {
+                    const BLUE: Vec3 = Vec3::new(0.0, 0.0, 255.0);
+                    let blue = BLUE * 0.1;
+                    color = Color::new(blue.x as u8, blue.y as u8, blue.z as u8, 255);
+                }
             }
-        } else {
-            // if the position is above the floor level, color it blue
-            if pos.y < state.world.get_above_floor_level() as f32 {
-                const BLUE: Vec3 = Vec3::new(0.0, 0.0, 255.0);
-                let blue = BLUE * 0.1;
-                color = Color::new(blue.x as u8, blue.y as u8, blue.z as u8, 255);
-            }
+            d.draw_rectangle(x as i32, y as i32, 1, 1, color);
         }
-        d.draw_rectangle(x as i32, y as i32, 1, 1, color);
-
-        x += 1;
-        if x >= DIMS.x as usize {
-            x = 0;
-            y += 1;
-        }
+        target = row_start + down * pixel_size.y;
     }
 
     chunks_to_generate

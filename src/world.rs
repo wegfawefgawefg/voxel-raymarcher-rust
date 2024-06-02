@@ -3,17 +3,19 @@ use std::collections::HashMap;
 use glam::UVec3;
 use glam::Vec3;
 use noise::{NoiseFn, Perlin};
-use rand::Rng;
+use raylib::color::Color;
+
+pub type Block = Color;
 
 #[derive(Debug, Clone)]
 pub struct Object {
     pub pos: Vec3,
     pub size: Vec3,
-    pub color: Vec3,
+    pub color: Block,
 }
 
 // define chunk type
-type Chunk = Vec<Vec<Vec<Option<Vec3>>>>;
+type Chunk = Vec<Vec<Vec<Option<Block>>>>;
 pub const CHUNK_SIZE: usize = 16;
 
 #[derive(Debug)]
@@ -25,7 +27,7 @@ pub struct World {
 }
 
 pub enum GetVoxelResult {
-    Voxel { color: Vec3 },
+    Voxel { block: Block },
     NoVoxel,
     ChunkNotGenerated,
 }
@@ -66,10 +68,10 @@ impl World {
         if let Some(chunk) = self.chunks.get(&chunk_pos) {
             let pos_in_chunk = pos.as_uvec3() - self.get_chunk_world_pos(chunk_pos).as_uvec3();
             if let Some(chunk) = chunk {
-                if let Some(color) =
+                if let Some(block) =
                     chunk[pos_in_chunk.x as usize][pos_in_chunk.y as usize][pos_in_chunk.z as usize]
                 {
-                    return GetVoxelResult::Voxel { color };
+                    return GetVoxelResult::Voxel { block };
                 } else {
                     return GetVoxelResult::NoVoxel;
                 }
@@ -80,7 +82,7 @@ impl World {
         GetVoxelResult::NoVoxel
     }
 
-    pub fn set_voxel(&mut self, pos: Vec3, color: Vec3) {
+    pub fn set_voxel(&mut self, pos: Vec3, color: Color) {
         if !self.is_in_bounds(pos) {
             return;
         }
@@ -95,7 +97,6 @@ impl World {
                     Some(color);
             }
         } else {
-            println!("Creating new chunk");
             // If the chunk does not exist, create it and set the voxel
             let mut new_chunk = Self::gen_empty_voxel_array(CHUNK_SIZE);
             new_chunk[pos_in_chunk.x as usize][pos_in_chunk.y as usize][pos_in_chunk.z as usize] =
@@ -126,11 +127,11 @@ impl World {
         self.chunks.clear();
     }
 
-    pub fn gen_empty_voxel_array(dim: usize) -> Vec<Vec<Vec<Option<Vec3>>>> {
+    pub fn gen_empty_voxel_array(dim: usize) -> Vec<Vec<Vec<Option<Color>>>> {
         vec![vec![vec![None; dim]; dim]; dim]
     }
 
-    pub fn gen_cube(&mut self, pos: Vec3, size: Vec3, block: Vec3) {
+    pub fn gen_cube(&mut self, pos: Vec3, size: Vec3, block: Color) {
         for x in 0..size.x as usize {
             for y in 0..size.y as usize {
                 for z in 0..size.z as usize {
@@ -146,7 +147,7 @@ impl World {
         });
     }
 
-    pub fn gen_sphere(&mut self, pos: Vec3, radius: f32, block: Vec3) {
+    pub fn gen_sphere(&mut self, pos: Vec3, radius: f32, block: Color) {
         let radius = radius as i32;
         for x in -radius..=radius {
             for y in -radius..=radius {
@@ -201,7 +202,7 @@ impl World {
                 let mut world_y = base_pos.y + y_offset;
 
                 // set the block green, and all blocks down to the floor brown
-                let gentle_green = Vec3::new(56.0, 183.0, 100.0);
+                let gentle_green = Block::new(56, 183, 100, 255);
                 // const RANDOM_DELTA_MAG: f32 = 10.0;
                 // let random_delta_r = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
                 // let random_delta_g = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
@@ -211,7 +212,7 @@ impl World {
                 self.set_voxel(Vec3::new(world_x, world_y, world_z), gentle_green);
 
                 // fill to the floor with brown
-                let brown = Vec3::new(122.0, 72.0, 65.0);
+                let brown = Block::new(122, 72, 65, 255);
                 // let random_delta_r = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
                 // let random_delta_g = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
                 // let random_delta_b = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
@@ -242,7 +243,6 @@ impl World {
         let perlin = Perlin::new(0);
 
         // Random number generator
-        let mut rng = rand::thread_rng();
 
         // Generate terrain within the chunk
         let scale = 0.1; // Scale factor for Perlin noise
@@ -257,21 +257,11 @@ impl World {
                 let world_y = base_pos.y + y_offset as f32;
 
                 // Set the block green, and all blocks down to the floor brown
-                let gentle_green = Vec3::new(56.0, 183.0, 100.0);
-                const RANDOM_DELTA_MAG: f32 = 10.0;
-                let random_delta_r = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
-                let random_delta_g = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
-                let random_delta_b = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
-                let grass_color =
-                    gentle_green + Vec3::new(random_delta_r, random_delta_g, random_delta_b);
-                self.set_voxel(Vec3::new(world_x, world_y, world_z), grass_color);
+                let gentle_green = Color::new(56, 183, 100, 255);
+                self.set_voxel(Vec3::new(world_x, world_y, world_z), gentle_green);
 
                 // Fill to the floor with brown
-                let brown = Vec3::new(122.0, 72.0, 65.0);
-                let random_delta_r = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
-                let random_delta_g = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
-                let random_delta_b = rng.gen_range(-1.0..1.0) * RANDOM_DELTA_MAG;
-                let dirt_color = brown + Vec3::new(random_delta_r, random_delta_g, random_delta_b);
+                let dirt_color = Color::new(122, 72, 65, 255);
                 let mut y = world_y + 1.0;
                 while y < self.get_lower_void() as f32 {
                     self.set_voxel(Vec3::new(world_x, y, world_z), dirt_color);
@@ -289,7 +279,7 @@ impl World {
         self.dim - 2
     }
 
-    pub fn gen_floor(&mut self, block: Vec3) {
+    pub fn gen_floor(&mut self, block: Block) {
         let floor_level = self.get_floor_level();
         for x in 0..self.dim {
             for z in 0..self.dim {
