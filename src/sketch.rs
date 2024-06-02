@@ -211,16 +211,16 @@ pub fn step(rl: &mut RaylibHandle, rlt: &mut RaylibThread, state: &mut State) {
         state.camera.pos.y = cam_height;
     }
 
-    println!(
-        "pos: ({:.3}, {:.3}, {:.3}), dir: ({:.3}, {:.3}, {:.3}), vpd: {:.3}",
-        state.camera.pos.x,
-        state.camera.pos.y,
-        state.camera.pos.z,
-        state.camera.dir.x,
-        state.camera.dir.y,
-        state.camera.dir.z,
-        state.camera.viewplane_distance
-    );
+    // println!(
+    //     "pos: ({:.3}, {:.3}, {:.3}), dir: ({:.3}, {:.3}, {:.3}), vpd: {:.3}",
+    //     state.camera.pos.x,
+    //     state.camera.pos.y,
+    //     state.camera.pos.z,
+    //     state.camera.dir.x,
+    //     state.camera.dir.y,
+    //     state.camera.dir.z,
+    //     state.camera.viewplane_distance
+    // );
 }
 
 pub fn draw_voxels(state: &State, d: &mut RaylibTextureMode<RaylibDrawHandle>) -> Vec<UVec3> {
