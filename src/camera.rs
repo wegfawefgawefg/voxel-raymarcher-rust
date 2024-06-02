@@ -9,7 +9,7 @@ pub struct Camera {
     pub viewplane_distance: f32,
 }
 
-const UP: Vec3 = Vec3::new(0.0, 1.0, 0.0);
+const UP: Vec3 = Vec3::new(0.0, -1.0, 0.0);
 
 impl Camera {
     pub fn new(pos: Vec3, dir: Vec3, viewplane_distance: f32) -> Self {
@@ -29,7 +29,7 @@ impl Camera {
     }
 
     pub fn get_right(&self) -> Vec3 {
-        self.dir.cross(Vec3::new(0.0, 1.0, 0.0)).normalize()
+        self.dir.cross(UP).normalize()
     }
 
     pub fn get_down(&self) -> Vec3 {

@@ -1,4 +1,4 @@
-use crate::camera::Camera;
+use crate::{camera::Camera, UP};
 use glam::{Vec2, Vec3};
 
 #[derive(Debug)]
@@ -16,18 +16,22 @@ impl Viewplane {
     pub fn top_left_corner_from_perspective_of(&self, camera: &Camera) -> Vec3 {
         let half_size = self.size / 2.0;
         let center = camera.pos + camera.dir * camera.viewplane_distance;
-        let right = camera.dir.cross(Vec3::new(0.0, 1.0, 0.0)).normalize();
-        let up = right.cross(camera.dir).normalize();
+        let right = self.get_right_from_perspective_of(camera);
+        let up = self.get_up_from_perspective_of(camera);
         center - right * half_size.x + up * half_size.y
     }
 
+    pub fn get_up_from_perspective_of(&self, camera: &Camera) -> Vec3 {
+        let right = self.get_right_from_perspective_of(camera);
+        right.cross(camera.dir).normalize()
+    }
+
     pub fn get_right_from_perspective_of(&self, camera: &Camera) -> Vec3 {
-        camera.dir.cross(Vec3::new(0.0, 1.0, 0.0)).normalize()
+        camera.dir.cross(UP).normalize()
     }
 
     pub fn get_down_from_perspective_of(&self, camera: &Camera) -> Vec3 {
-        let right = self.get_right_from_perspective_of(camera);
-        right.cross(camera.dir).normalize() * -1.0
+        -self.get_up_from_perspective_of(camera)
     }
 
     pub fn validate_aspect_ratio(&self, ratio: f32) {

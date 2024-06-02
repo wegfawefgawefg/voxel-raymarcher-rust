@@ -4,14 +4,15 @@ use raylib::prelude::*;
 use crate::camera::Camera;
 use crate::viewplane::Viewplane;
 use crate::world::World;
+use crate::UP;
 use crate::{DIMS, MARCH_STEP_SIZE, NUM_RAY_STEPS};
 
 pub const FRAMES_PER_SECOND: u32 = 60;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Mode {
-    ORBIT,
-    FLY,
+    Orbit,
+    Fly,
 }
 
 pub struct State {
@@ -94,7 +95,7 @@ impl State {
             camera,
             viewplane,
 
-            mode: Mode::ORBIT,
+            mode: Mode::Orbit,
         }
     }
 }
@@ -107,8 +108,8 @@ pub fn process_events_and_input(rl: &mut RaylibHandle, state: &mut State) {
     // if m is pressed, toggle mode
     if rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_M) {
         state.mode = match state.mode {
-            Mode::ORBIT => Mode::FLY,
-            Mode::FLY => Mode::ORBIT,
+            Mode::Orbit => Mode::Fly,
+            Mode::Fly => Mode::Orbit,
         };
     }
 
@@ -151,15 +152,12 @@ pub fn process_events_and_input(rl: &mut RaylibHandle, state: &mut State) {
         state.camera.pos -= state.camera.get_up() * cam_speed;
     }
 
+    // if q and e are pressed, rotate the camera
     if rl.is_key_down(raylib::consts::KeyboardKey::KEY_Q) {
-        state
-            .camera
-            .rotate(Vec3::new(0.0, 1.0, 0.0), rotation_speed);
+        state.camera.rotate(UP, rotation_speed);
     }
     if rl.is_key_down(raylib::consts::KeyboardKey::KEY_E) {
-        state
-            .camera
-            .rotate(Vec3::new(0.0, 1.0, 0.0), -rotation_speed);
+        state.camera.rotate(UP, -rotation_speed);
     }
 
     // t and g to move the viewplane forward and backward
@@ -186,7 +184,7 @@ pub fn step(rl: &mut RaylibHandle, rlt: &mut RaylibThread, state: &mut State) {
     //     camera.dir = glm.normalize(world.get_center() - camera.pos)
     //     camera.pos.y = cam_height
 
-    if state.mode == Mode::ORBIT {
+    if state.mode == Mode::Orbit {
         let tm = 1.0;
         let t = rl.get_time() * tm;
         let orbit_radius: f32 = 10.0;
@@ -222,15 +220,17 @@ pub fn draw_voxels(state: &State, d: &mut RaylibTextureMode<RaylibDrawHandle>) {
         let mut hit = false;
         let mut dist_to_hit = NUM_RAY_STEPS as f32 * MARCH_STEP_SIZE; // starts at max
         let mut pos = state.camera.pos;
+        let mut voxel: Option<Vec3> = None;
         for _ in 0..NUM_RAY_STEPS {
             pos += ray * MARCH_STEP_SIZE;
             let pos_in_world_space = pos - state.world.pos;
             let wp = pos_in_world_space.floor();
             if state.world.is_in_bounds(wp) {
-                let voxel = state.world.voxels[wp.x as usize][wp.y as usize][wp.z as usize];
-                if voxel.is_some() {
+                let cell = state.world.voxels[wp.x as usize][wp.y as usize][wp.z as usize];
+                if cell.is_some() {
                     hit = true;
                     dist_to_hit = (pos - state.camera.pos).length();
+                    voxel = cell;
                     break;
                 }
             }
@@ -239,12 +239,14 @@ pub fn draw_voxels(state: &State, d: &mut RaylibTextureMode<RaylibDrawHandle>) {
         if hit {
             let mut brightness = 1.0 - dist_to_hit / (NUM_RAY_STEPS as f32 * MARCH_STEP_SIZE);
             brightness = brightness.max(0.0).min(1.0);
-            color = Color::new(
-                (255.0 * brightness) as u8,
-                (255.0 * brightness) as u8,
-                (255.0 * brightness) as u8,
-                255,
-            );
+            if let Some(voxel) = voxel {
+                color = Color::new(
+                    (voxel.x * brightness) as u8,
+                    (voxel.y * brightness) as u8,
+                    (voxel.z * brightness) as u8,
+                    255,
+                );
+            }
         }
         d.draw_rectangle(x as i32, y as i32, 1, 1, color);
 

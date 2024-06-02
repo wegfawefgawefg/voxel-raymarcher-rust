@@ -1,4 +1,4 @@
-use glam::{IVec2, UVec2};
+use glam::{IVec2, UVec2, Vec3};
 use raylib::prelude::*;
 use raylib::{ffi::SetTraceLogLevel, prelude::TraceLogLevel};
 
@@ -9,8 +9,9 @@ mod world;
 
 const TIMESTEP: f32 = 1.0 / sketch::FRAMES_PER_SECOND as f32;
 const DIMS: UVec2 = UVec2::new(240, 160);
-const NUM_RAY_STEPS: i32 = 128;
+const NUM_RAY_STEPS: i32 = 64;
 const MARCH_STEP_SIZE: f32 = 0.2;
+const UP: Vec3 = Vec3::new(0.0, -1.0, 0.0);
 
 fn main() {
     let mut state = sketch::State::new();
