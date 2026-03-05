@@ -17,12 +17,15 @@ struct RenderSignature {
     viewplane_distance: f32,
     draw_distance: f32,
     march_step_size: f32,
+    render_width: u32,
+    render_height: u32,
 }
 
 pub struct Renderer {
     pub dims: UVec2,
     texture: Texture2D,
-    framebuffer: Vec<u8>,
+    ray_buffer: Vec<u8>,
+    upload_buffer: Vec<u8>,
     last_signature: Option<RenderSignature>,
 }
 
@@ -39,7 +42,8 @@ impl Renderer {
         Self {
             dims,
             texture,
-            framebuffer: vec![0; (dims.x * dims.y * 4) as usize],
+            ray_buffer: vec![0; (dims.x * dims.y * 4) as usize],
+            upload_buffer: vec![0; (dims.x * dims.y * 4) as usize],
             last_signature: None,
         }
     }
@@ -47,19 +51,36 @@ impl Renderer {
     pub fn draw_scene(&mut self, state: &mut State) {
         update_quality_scale(state);
 
-        let effective_draw_distance = state.draw_distance * state.quality_scale;
+        let render_width = ((self.dims.x as f32 * state.quality_scale).round() as u32)
+            .max(1)
+            .min(self.dims.x);
+        let render_height = ((self.dims.y as f32 * state.quality_scale).round() as u32)
+            .max(1)
+            .min(self.dims.y);
+        state.render_width = render_width;
+        state.render_height = render_height;
+
         let signature = RenderSignature {
             world_revision: state.world.revision(),
             camera_pos: state.camera.pos,
             camera_dir: state.camera.dir,
             viewplane_size: state.viewplane.size,
             viewplane_distance: state.camera.viewplane_distance,
-            draw_distance: effective_draw_distance,
+            draw_distance: state.draw_distance,
             march_step_size: state.march_step_size,
+            render_width,
+            render_height,
         };
 
         if self.last_signature == Some(signature) {
             return;
+        }
+
+        let ray_len = (render_width as usize)
+            .saturating_mul(render_height as usize)
+            .saturating_mul(4);
+        if self.ray_buffer.len() != ray_len {
+            self.ray_buffer.resize(ray_len, 0);
         }
 
         state.last_render_stats = raymarch::draw_voxels(
@@ -67,14 +88,28 @@ impl Renderer {
                 world: &state.world,
                 camera: &state.camera,
                 viewplane: &state.viewplane,
-                draw_distance: effective_draw_distance,
+                draw_distance: state.draw_distance,
                 march_step_size: state.march_step_size,
             },
-            &mut self.framebuffer,
-            self.dims.x as i32,
-            self.dims.y as i32,
+            &mut self.ray_buffer,
+            render_width as i32,
+            render_height as i32,
         );
-        self.texture.update_texture(&self.framebuffer);
+
+        if render_width == self.dims.x && render_height == self.dims.y {
+            self.texture.update_texture(&self.ray_buffer);
+        } else {
+            upscale_nearest_rgba(
+                &self.ray_buffer,
+                &mut self.upload_buffer,
+                render_width as usize,
+                render_height as usize,
+                self.dims.x as usize,
+                self.dims.y as usize,
+            );
+            self.texture.update_texture(&self.upload_buffer);
+        }
+
         self.last_signature = Some(signature);
     }
 
@@ -114,6 +149,7 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
     ui_overlay::draw_ui_overlay(state, d);
 }
 
+#[inline]
 fn update_quality_scale(state: &mut State) {
     if !state.auto_quality {
         state.quality_scale = state
@@ -131,4 +167,29 @@ fn update_quality_scale(state: &mut State) {
     state.quality_scale = state
         .quality_scale
         .clamp(MIN_QUALITY_SCALE, MAX_QUALITY_SCALE);
+}
+
+fn upscale_nearest_rgba(
+    src: &[u8],
+    dst: &mut [u8],
+    src_w: usize,
+    src_h: usize,
+    dst_w: usize,
+    dst_h: usize,
+) {
+    debug_assert_eq!(src.len(), src_w * src_h * 4);
+    debug_assert_eq!(dst.len(), dst_w * dst_h * 4);
+
+    for y in 0..dst_h {
+        let sy = y * src_h / dst_h;
+        for x in 0..dst_w {
+            let sx = x * src_w / dst_w;
+            let src_idx = (sy * src_w + sx) * 4;
+            let dst_idx = (y * dst_w + x) * 4;
+            dst[dst_idx] = src[src_idx];
+            dst[dst_idx + 1] = src[src_idx + 1];
+            dst[dst_idx + 2] = src[src_idx + 2];
+            dst[dst_idx + 3] = 255;
+        }
+    }
 }

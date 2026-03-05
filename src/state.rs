@@ -4,10 +4,11 @@ use crate::camera::Camera;
 use crate::raymarch::{self, RenderStats};
 use crate::viewplane::Viewplane;
 use crate::world::{Block, World};
-use crate::{DIMS, MARCH_STEP_SIZE, NUM_RAY_STEPS, WORLD_SIZE};
+use crate::{DIMS, MARCH_STEP_SIZE, WORLD_SIZE};
 
 pub const FRAMES_PER_SECOND: u32 = 60;
 pub const TARGET_FPS: i32 = 60;
+pub const DEFAULT_DRAW_DISTANCE: f32 = 128.0;
 
 const MIN_DRAW_DISTANCE: f32 = 2.0;
 const MAX_DRAW_DISTANCE: f32 = 2000.0;
@@ -35,6 +36,8 @@ pub struct State {
     pub fps: i32,
     pub auto_quality: bool,
     pub quality_scale: f32,
+    pub render_width: u32,
+    pub render_height: u32,
     pub chunk_gen_budget_per_step: usize,
     pub mouse_look_locked: bool,
     pub last_render_stats: RenderStats,
@@ -106,12 +109,14 @@ impl State {
             camera,
             viewplane,
             mode: Mode::Fly,
-            draw_distance: NUM_RAY_STEPS as f32 * MARCH_STEP_SIZE,
+            draw_distance: DEFAULT_DRAW_DISTANCE,
             march_step_size: MARCH_STEP_SIZE,
             fov_y_deg,
             fps: 0,
             auto_quality: true,
             quality_scale: 1.0,
+            render_width: DIMS.x,
+            render_height: DIMS.y,
             chunk_gen_budget_per_step: 2,
             mouse_look_locked: true,
             last_render_stats: RenderStats::default(),

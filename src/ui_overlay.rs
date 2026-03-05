@@ -16,18 +16,29 @@ pub struct UiLayout {
 }
 
 pub fn ui_layout(screen_width: i32, _screen_height: i32) -> UiLayout {
-    let panel_width = 280.0;
-    let panel_height = 286.0;
-    let panel_x = screen_width as f32 - panel_width - 16.0;
-    let panel_y = 16.0;
-    let button_w = 28.0;
-    let button_h = 22.0;
+    let screen_w = screen_width.max(1) as f32;
+    let screen_h = _screen_height.max(1) as f32;
 
-    let dist_row_y = panel_y + 66.0;
-    let step_row_y = panel_y + 102.0;
-    let fov_row_y = panel_y + 138.0;
-    let dec_x = panel_x + panel_width - 72.0;
-    let inc_x = panel_x + panel_width - 36.0;
+    let margin = (screen_w * 0.012).clamp(10.0, 24.0);
+    let panel_width = (screen_w * 0.23).clamp(280.0, 420.0);
+    let panel_height = (screen_h * 0.42).clamp(280.0, 380.0);
+    let panel_x = screen_w - panel_width - margin;
+    let panel_y = margin;
+
+    let padding = (panel_width * 0.04).clamp(10.0, 18.0);
+    let button_w = (panel_width * 0.10).clamp(26.0, 36.0);
+    let button_h = (panel_height * 0.075).clamp(20.0, 28.0);
+
+    let header_h = (panel_height * 0.10).clamp(20.0, 32.0);
+    let status_h = (panel_height * 0.10).clamp(20.0, 30.0);
+    let controls_top = panel_y + padding + header_h + status_h + 8.0;
+    let row_gap = (panel_height * 0.11).clamp(30.0, 42.0);
+
+    let dist_row_y = controls_top;
+    let step_row_y = dist_row_y + row_gap;
+    let fov_row_y = step_row_y + row_gap;
+    let inc_x = panel_x + panel_width - padding - button_w;
+    let dec_x = inc_x - button_w - 6.0;
 
     UiLayout {
         panel: Rectangle::new(panel_x, panel_y, panel_width, panel_height),
@@ -80,11 +91,11 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
     let layout = ui_layout(screen_width, screen_height);
 
     let step_size = state.march_step_size.max(MIN_STEP_SIZE).min(MAX_STEP_SIZE);
-    let effective_draw_distance = state.draw_distance * state.quality_scale;
-    let mut num_ray_steps = (effective_draw_distance / step_size).ceil() as i32;
+    let mut num_ray_steps = (state.draw_distance / step_size).ceil() as i32;
     num_ray_steps = num_ray_steps.max(1).min(MAX_RAY_STEPS);
     let draw_distance = num_ray_steps as f32 * step_size;
-    let pixel_budget = DIMS.x as i64 * DIMS.y as i64 * num_ray_steps as i64;
+    let pixel_budget =
+        state.render_width as i64 * state.render_height as i64 * num_ray_steps as i64;
     let fov_y_deg = current_fov_y_deg(state);
     let stats = state.last_render_stats;
     let avg_steps_per_ray = if stats.rays_cast > 0 {
@@ -92,17 +103,22 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
     } else {
         0.0
     };
+    let panel_x = layout.panel.x as i32;
+    let panel_y = layout.panel.y as i32;
+    let pad = (layout.panel.width * 0.04).clamp(10.0, 18.0) as i32;
+    let text_x = panel_x + pad;
+    let metric_start_y = (layout.fov_dec.y + layout.fov_dec.height + (pad as f32 * 0.5)) as i32;
 
     d.draw_rectangle(
-        layout.panel.x as i32,
-        layout.panel.y as i32,
+        panel_x,
+        panel_y,
         layout.panel.width as i32,
         layout.panel.height as i32,
         Color::new(0, 0, 0, 170),
     );
     d.draw_rectangle_lines(
-        layout.panel.x as i32,
-        layout.panel.y as i32,
+        panel_x,
+        panel_y,
         layout.panel.width as i32,
         layout.panel.height as i32,
         Color::new(180, 180, 180, 255),
@@ -113,46 +129,40 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
         Mode::Fly => "Fly",
     };
 
-    d.draw_text(
-        "Perf Overlay",
-        layout.panel.x as i32 + 10,
-        layout.panel.y as i32 + 8,
-        18,
-        Color::WHITE,
-    );
+    d.draw_text("Perf Overlay", text_x, panel_y + pad - 2, 18, Color::WHITE);
     d.draw_text(
         &format!("FPS: {}", state.fps),
-        layout.panel.x as i32 + 10,
-        layout.panel.y as i32 + 32,
+        text_x,
+        panel_y + pad + 22,
         18,
         Color::GREEN,
     );
     d.draw_text(
         &format!("Mode: {}", mode_label),
-        layout.panel.x as i32 + 130,
-        layout.panel.y as i32 + 32,
+        text_x + (layout.panel.width as i32 / 2) - 8,
+        panel_y + pad + 22,
         18,
         Color::WHITE,
     );
 
     d.draw_text(
         &format!("Draw Dist: {:>6.2}", draw_distance),
-        layout.panel.x as i32 + 10,
-        layout.panel.y as i32 + 68,
+        text_x,
+        layout.dist_dec.y as i32 + 2,
         18,
         Color::WHITE,
     );
     d.draw_text(
         &format!("Step Size: {:>6.3}", step_size),
-        layout.panel.x as i32 + 10,
-        layout.panel.y as i32 + 104,
+        text_x,
+        layout.step_dec.y as i32 + 2,
         18,
         Color::WHITE,
     );
     d.draw_text(
         &format!("FOV Y: {:>6.2} deg", fov_y_deg),
-        layout.panel.x as i32 + 10,
-        layout.panel.y as i32 + 140,
+        text_x,
+        layout.fov_dec.y as i32 + 2,
         18,
         Color::WHITE,
     );
@@ -162,29 +172,39 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
             state.quality_scale * 100.0,
             if state.auto_quality { "AUTO" } else { "MANUAL" }
         ),
-        layout.panel.x as i32 + 10,
-        layout.panel.y as i32 + 164,
+        text_x,
+        metric_start_y,
+        16,
+        Color::new(220, 220, 220, 255),
+    );
+    d.draw_text(
+        &format!(
+            "Render Res: {}x{} / {}x{}",
+            state.render_width, state.render_height, DIMS.x, DIMS.y
+        ),
+        text_x,
+        metric_start_y + 20,
         16,
         Color::new(220, 220, 220, 255),
     );
     d.draw_text(
         &format!("Chunk Gen Budget: {}", state.chunk_gen_budget_per_step),
-        layout.panel.x as i32 + 10,
-        layout.panel.y as i32 + 184,
+        text_x,
+        metric_start_y + 40,
         16,
         Color::new(220, 220, 220, 255),
     );
     d.draw_text(
         &format!("Steps: {}  Budget: {}", num_ray_steps, pixel_budget),
-        layout.panel.x as i32 + 10,
-        layout.panel.y as i32 + 204,
+        text_x,
+        metric_start_y + 60,
         16,
         Color::new(200, 200, 200, 255),
     );
     d.draw_text(
         &format!("Rays: {}  Hits: {}", stats.rays_cast, stats.rays_hit),
-        layout.panel.x as i32 + 10,
-        layout.panel.y as i32 + 224,
+        text_x,
+        metric_start_y + 80,
         16,
         Color::new(200, 200, 200, 255),
     );
@@ -193,15 +213,15 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
             "Voxel Steps: {}  Avg/Ray: {:.2}",
             stats.voxel_steps, avg_steps_per_ray
         ),
-        layout.panel.x as i32 + 10,
-        layout.panel.y as i32 + 244,
+        text_x,
+        metric_start_y + 100,
         16,
         Color::new(200, 200, 200, 255),
     );
     d.draw_text(
         &format!("Empty Chunk Skips: {}", stats.empty_chunk_skips),
-        layout.panel.x as i32 + 10,
-        layout.panel.y as i32 + 264,
+        text_x,
+        metric_start_y + 120,
         16,
         Color::new(200, 200, 200, 255),
     );
@@ -227,8 +247,8 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
         } else {
             "Mouse Look: OFF"
         },
-        layout.panel.x as i32 + 130,
-        layout.panel.y as i32 + 8,
+        text_x + (layout.panel.width as i32 / 2) - 8,
+        panel_y + pad - 2,
         18,
         if state.mouse_look_locked {
             Color::GREEN

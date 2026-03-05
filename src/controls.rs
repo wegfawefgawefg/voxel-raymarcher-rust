@@ -1,9 +1,9 @@
 use glam::Vec2;
 use raylib::prelude::*;
 
-use crate::state::{Mode, State};
+use crate::state::{Mode, State, DEFAULT_DRAW_DISTANCE};
 use crate::ui_overlay;
-use crate::{MARCH_STEP_SIZE, NUM_RAY_STEPS, UP};
+use crate::{MARCH_STEP_SIZE, UP};
 
 const DISTANCE_FACTOR: f32 = 1.1;
 const STEP_FACTOR: f32 = 1.1;
@@ -130,7 +130,7 @@ pub fn process_events_and_input(rl: &mut RaylibHandle, state: &mut State) {
         state.march_step_size *= STEP_FACTOR;
     }
     if rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_BACKSPACE) {
-        state.draw_distance = NUM_RAY_STEPS as f32 * MARCH_STEP_SIZE;
+        state.draw_distance = DEFAULT_DRAW_DISTANCE;
         state.march_step_size = MARCH_STEP_SIZE;
         state.apply_fov_y_deg(53.130104);
     }

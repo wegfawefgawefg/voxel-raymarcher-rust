@@ -15,7 +15,6 @@ mod world_generation;
 
 const TIMESTEP: f32 = 1.0 / state::FRAMES_PER_SECOND as f32;
 const DIMS: UVec2 = UVec2::new(240 / 2, 160 / 2);
-const NUM_RAY_STEPS: i32 = 128;
 const MARCH_STEP_SIZE: f32 = 0.2;
 const UP: Vec3 = Vec3::new(0.0, -1.0, 0.0);
 const WORLD_SIZE: usize = 256;
