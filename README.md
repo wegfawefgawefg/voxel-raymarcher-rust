@@ -7,6 +7,8 @@ For a larger/slower variant, see the `chunks` branch.
 ![image](image.png)
 ![scrot](scrot.png)
 
+<video src="vid.mp4" controls width="900"></video>
+
 ## Run
 
 ```bash
