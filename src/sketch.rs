@@ -13,8 +13,11 @@ const MAX_DRAW_DISTANCE: f32 = 2000.0;
 const MIN_STEP_SIZE: f32 = 0.02;
 const MAX_STEP_SIZE: f32 = 4.0;
 const MAX_RAY_STEPS: i32 = 4096;
+const MIN_FOV_Y_DEG: f32 = 25.0;
+const MAX_FOV_Y_DEG: f32 = 120.0;
 const DISTANCE_FACTOR: f32 = 1.1;
 const STEP_FACTOR: f32 = 1.1;
+const FOV_FACTOR: f32 = 1.05;
 const MOUSE_LOOK_SENSITIVITY: f32 = 0.003;
 const MAX_VIEW_ALIGNMENT_WITH_UP: f32 = 0.995;
 
@@ -35,6 +38,7 @@ pub struct State {
     pub mode: Mode,
     pub draw_distance: f32,
     pub march_step_size: f32,
+    pub fov_y_deg: f32,
     pub fps: i32,
     pub mouse_scale: Vec2,
     pub mouse_look_locked: bool,
@@ -117,6 +121,9 @@ impl State {
 
         let viewplane = Box::new(Viewplane::new(Vec2::new(4.0, 3.0), 4.0 / 3.0));
 
+        let fov_y_deg =
+            (2.0 * ((viewplane.size.y * 0.5) / camera.viewplane_distance).atan()).to_degrees();
+
         Self {
             running: true,
             time_since_last_update: 0.0,
@@ -125,12 +132,13 @@ impl State {
             camera,
             viewplane,
 
-            mode: Mode::Orbit,
+            mode: Mode::Fly,
             draw_distance: NUM_RAY_STEPS as f32 * MARCH_STEP_SIZE,
             march_step_size: MARCH_STEP_SIZE,
+            fov_y_deg,
             fps: 0,
             mouse_scale: Vec2::ONE,
-            mouse_look_locked: false,
+            mouse_look_locked: true,
         }
     }
 }
@@ -141,6 +149,8 @@ struct UiLayout {
     dist_inc: Rectangle,
     step_dec: Rectangle,
     step_inc: Rectangle,
+    fov_dec: Rectangle,
+    fov_inc: Rectangle,
 }
 
 fn clamp_render_budget(state: &mut State) {
@@ -149,11 +159,12 @@ fn clamp_render_budget(state: &mut State) {
         .max(MIN_DRAW_DISTANCE)
         .min(MAX_DRAW_DISTANCE);
     state.march_step_size = state.march_step_size.max(MIN_STEP_SIZE).min(MAX_STEP_SIZE);
+    state.fov_y_deg = state.fov_y_deg.max(MIN_FOV_Y_DEG).min(MAX_FOV_Y_DEG);
 }
 
 fn ui_layout(screen_width: i32, _screen_height: i32) -> UiLayout {
     let panel_width = 280.0;
-    let panel_height = 148.0;
+    let panel_height = 182.0;
     let panel_x = screen_width as f32 - panel_width - 16.0;
     let panel_y = 16.0;
     let button_w = 28.0;
@@ -161,6 +172,7 @@ fn ui_layout(screen_width: i32, _screen_height: i32) -> UiLayout {
 
     let dist_row_y = panel_y + 66.0;
     let step_row_y = panel_y + 102.0;
+    let fov_row_y = panel_y + 138.0;
     let dec_x = panel_x + panel_width - 72.0;
     let inc_x = panel_x + panel_width - 36.0;
 
@@ -170,11 +182,27 @@ fn ui_layout(screen_width: i32, _screen_height: i32) -> UiLayout {
         dist_inc: Rectangle::new(inc_x, dist_row_y, button_w, button_h),
         step_dec: Rectangle::new(dec_x, step_row_y, button_w, button_h),
         step_inc: Rectangle::new(inc_x, step_row_y, button_w, button_h),
+        fov_dec: Rectangle::new(dec_x, fov_row_y, button_w, button_h),
+        fov_inc: Rectangle::new(inc_x, fov_row_y, button_w, button_h),
     }
 }
 
 fn point_in_rect(p: Vec2, r: Rectangle) -> bool {
     p.x >= r.x && p.x <= r.x + r.width && p.y >= r.y && p.y <= r.y + r.height
+}
+
+fn current_fov_y_deg(state: &State) -> f32 {
+    let distance = state.camera.viewplane_distance.max(0.001);
+    (2.0 * ((state.viewplane.size.y * 0.5) / distance).atan()).to_degrees()
+}
+
+fn apply_fov_y_deg(state: &mut State, new_fov_y_deg: f32) {
+    state.fov_y_deg = new_fov_y_deg.max(MIN_FOV_Y_DEG).min(MAX_FOV_Y_DEG);
+    let distance = state.camera.viewplane_distance.max(0.001);
+    let aspect = DIMS.x as f32 / DIMS.y as f32;
+    let half_height = (state.fov_y_deg.to_radians() * 0.5).tan() * distance;
+    let viewplane_height = half_height * 2.0;
+    state.viewplane.size = Vec2::new(viewplane_height * aspect, viewplane_height);
 }
 
 pub fn process_events_and_input(rl: &mut RaylibHandle, state: &mut State) {
@@ -273,6 +301,8 @@ pub fn process_events_and_input(rl: &mut RaylibHandle, state: &mut State) {
         state.camera.viewplane_distance += cam_speed;
     }
 
+    state.fov_y_deg = current_fov_y_deg(state);
+
     // Mouse freelook in fly mode while cursor is captured.
     if state.mode == Mode::Fly && state.mouse_look_locked {
         let scaled_delta = rl.get_mouse_delta();
@@ -313,6 +343,13 @@ pub fn process_events_and_input(rl: &mut RaylibHandle, state: &mut State) {
     if rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_BACKSPACE) {
         state.draw_distance = NUM_RAY_STEPS as f32 * MARCH_STEP_SIZE;
         state.march_step_size = MARCH_STEP_SIZE;
+        apply_fov_y_deg(state, 53.130104);
+    }
+    if rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_LEFT_BRACKET) {
+        apply_fov_y_deg(state, state.fov_y_deg / FOV_FACTOR);
+    }
+    if rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_RIGHT_BRACKET) {
+        apply_fov_y_deg(state, state.fov_y_deg * FOV_FACTOR);
     }
     clamp_render_budget(state);
 
@@ -339,6 +376,12 @@ pub fn process_events_and_input(rl: &mut RaylibHandle, state: &mut State) {
         }
         if point_in_rect(ui_mouse, layout.step_inc) {
             state.march_step_size *= STEP_FACTOR;
+        }
+        if point_in_rect(ui_mouse, layout.fov_dec) {
+            apply_fov_y_deg(state, state.fov_y_deg / FOV_FACTOR);
+        }
+        if point_in_rect(ui_mouse, layout.fov_inc) {
+            apply_fov_y_deg(state, state.fov_y_deg * FOV_FACTOR);
         }
         clamp_render_budget(state);
     }
@@ -611,6 +654,7 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
     num_ray_steps = num_ray_steps.max(1).min(MAX_RAY_STEPS);
     let draw_distance = num_ray_steps as f32 * step_size;
     let pixel_budget = DIMS.x as i64 * DIMS.y as i64 * num_ray_steps as i64;
+    let fov_y_deg = current_fov_y_deg(state);
 
     d.draw_rectangle(
         layout.panel.x as i32,
@@ -663,9 +707,16 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
         Color::WHITE,
     );
     d.draw_text(
+        &format!("FOV Y: {:>6.2} deg", fov_y_deg),
+        layout.panel.x as i32 + 10,
+        layout.panel.y as i32 + 140,
+        18,
+        Color::WHITE,
+    );
+    d.draw_text(
         &format!("Steps: {}  Budget: {}", num_ray_steps, pixel_budget),
         layout.panel.x as i32 + 10,
-        layout.panel.y as i32 + 128,
+        layout.panel.y as i32 + 164,
         16,
         Color::new(200, 200, 200, 255),
     );
@@ -674,9 +725,11 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
     draw_button(d, layout.dist_inc, "+");
     draw_button(d, layout.step_dec, "-");
     draw_button(d, layout.step_inc, "+");
+    draw_button(d, layout.fov_dec, "-");
+    draw_button(d, layout.fov_inc, "+");
 
     d.draw_text(
-        "Keys: Tab mouse-lock, [-]/[+] dist, [,]/[.] step, Backspace reset",
+        "Keys: Tab mouse-lock, [-]/[+] dist, [,]/[.] step, [[/]] FOV, Backspace reset",
         16,
         screen_height - 28,
         18,
