@@ -1,7 +1,7 @@
 use glam::Vec2;
 use raylib::prelude::*;
 
-use crate::raymarch::{MAX_RAY_STEPS, MAX_STEP_SIZE, MIN_STEP_SIZE};
+use crate::raymarch::{MAX_RAY_STEPS, MAX_STEP_BUDGET, MIN_STEP_BUDGET};
 use crate::state::{Mode, State};
 use crate::DIMS;
 
@@ -21,7 +21,7 @@ pub fn ui_layout(screen_width: i32, _screen_height: i32) -> UiLayout {
 
     let margin = (screen_w * 0.012).clamp(10.0, 24.0);
     let panel_width = (screen_w * 0.23).clamp(280.0, 420.0);
-    let panel_height = (screen_h * 0.42).clamp(280.0, 380.0);
+    let panel_height = (screen_h * 0.52).clamp(330.0, 470.0);
     let panel_x = screen_w - panel_width - margin;
     let panel_y = margin;
 
@@ -90,10 +90,13 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
     let screen_height = d.get_screen_height();
     let layout = ui_layout(screen_width, screen_height);
 
-    let step_size = state.march_step_size.max(MIN_STEP_SIZE).min(MAX_STEP_SIZE);
-    let mut num_ray_steps = (state.draw_distance / step_size).ceil() as i32;
+    let step_budget = state
+        .voxel_step_budget
+        .max(MIN_STEP_BUDGET)
+        .min(MAX_STEP_BUDGET);
+    let mut num_ray_steps = (state.draw_distance / step_budget).ceil() as i32;
     num_ray_steps = num_ray_steps.max(1).min(MAX_RAY_STEPS);
-    let draw_distance = num_ray_steps as f32 * step_size;
+    let draw_distance = num_ray_steps as f32 * step_budget;
     let pixel_budget =
         state.render_width as i64 * state.render_height as i64 * num_ray_steps as i64;
     let fov_y_deg = current_fov_y_deg(state);
@@ -160,7 +163,7 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
         Color::WHITE,
     );
     d.draw_text(
-        &format!("Step Size: {:>6.3}", step_size),
+        &format!("Step Budget: {:>6.3}", step_budget),
         text_x,
         layout.step_dec.y as i32 + 2,
         18,
@@ -198,7 +201,10 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
         Color::new(220, 220, 220, 255),
     );
     d.draw_text(
-        &format!("Steps: {}  Budget: {}", num_ray_steps, pixel_budget),
+        &format!(
+            "DDA Step Cap: {}  Pixel Budget: {}",
+            num_ray_steps, pixel_budget
+        ),
         text_x,
         metric_start_y + 60,
         16,
@@ -228,6 +234,33 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
         16,
         Color::new(200, 200, 200, 255),
     );
+    d.draw_text(
+        &format!(
+            "Timings ms Sim/Ray/Up/F: {:.2}/{:.2}/{:.2}/{:.2}",
+            state.last_frame_timings.simulation_ms,
+            state.last_frame_timings.raymarch_ms,
+            state.last_frame_timings.upload_ms,
+            state.last_frame_timings.frame_ms
+        ),
+        text_x,
+        metric_start_y + 140,
+        16,
+        Color::new(200, 200, 200, 255),
+    );
+    d.draw_text(
+        &format!(
+            "Render Reuse: {}",
+            if state.last_frame_timings.reused_render {
+                "ON"
+            } else {
+                "OFF"
+            }
+        ),
+        text_x,
+        metric_start_y + 160,
+        16,
+        Color::new(200, 200, 200, 255),
+    );
 
     draw_button(d, layout.dist_dec, "-");
     draw_button(d, layout.dist_inc, "+");
@@ -237,7 +270,7 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
     draw_button(d, layout.fov_inc, "+");
 
     d.draw_text(
-        "Keys: Tab, [-]/[+], [,]/[.], [[/]], F1..F6 Scale, F7/F8 Gen, Backspace",
+        "Keys: Tab, [-]/[+], [,]/[.] StepBudget, [[/]], F1..F6 Scale, F7/F8 Gen, Backspace",
         16,
         screen_height - 28,
         18,

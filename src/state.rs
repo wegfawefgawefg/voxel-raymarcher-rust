@@ -4,7 +4,7 @@ use crate::camera::Camera;
 use crate::raymarch::{self, RenderStats};
 use crate::viewplane::Viewplane;
 use crate::world::{Block, World};
-use crate::{DIMS, MARCH_STEP_SIZE, WORLD_SIZE};
+use crate::{DIMS, VOXEL_STEP_BUDGET, WORLD_SIZE};
 
 pub const FRAMES_PER_SECOND: u32 = 60;
 pub const DEFAULT_DRAW_DISTANCE: f32 = 128.0;
@@ -44,6 +44,15 @@ impl ResolutionScale {
     }
 }
 
+#[derive(Debug, Copy, Clone, Default)]
+pub struct FrameTimings {
+    pub simulation_ms: f32,
+    pub raymarch_ms: f32,
+    pub upload_ms: f32,
+    pub frame_ms: f32,
+    pub reused_render: bool,
+}
+
 pub struct State {
     pub running: bool,
     pub time_since_last_update: f32,
@@ -54,7 +63,7 @@ pub struct State {
 
     pub mode: Mode,
     pub draw_distance: f32,
-    pub march_step_size: f32,
+    pub voxel_step_budget: f32,
     pub fov_y_deg: f32,
     pub fps: i32,
     pub resolution_scale: ResolutionScale,
@@ -63,6 +72,7 @@ pub struct State {
     pub chunk_gen_budget_per_step: usize,
     pub mouse_look_locked: bool,
     pub last_render_stats: RenderStats,
+    pub last_frame_timings: FrameTimings,
 }
 
 impl State {
@@ -132,7 +142,7 @@ impl State {
             viewplane,
             mode: Mode::Fly,
             draw_distance: DEFAULT_DRAW_DISTANCE,
-            march_step_size: MARCH_STEP_SIZE,
+            voxel_step_budget: VOXEL_STEP_BUDGET,
             fov_y_deg,
             fps: 0,
             resolution_scale: ResolutionScale::XQuarter,
@@ -141,6 +151,7 @@ impl State {
             chunk_gen_budget_per_step: 2,
             mouse_look_locked: true,
             last_render_stats: RenderStats::default(),
+            last_frame_timings: FrameTimings::default(),
         }
     }
 
@@ -167,10 +178,10 @@ impl State {
             .draw_distance
             .max(MIN_DRAW_DISTANCE)
             .min(MAX_DRAW_DISTANCE);
-        self.march_step_size = self
-            .march_step_size
-            .max(raymarch::MIN_STEP_SIZE)
-            .min(raymarch::MAX_STEP_SIZE);
+        self.voxel_step_budget = self
+            .voxel_step_budget
+            .max(raymarch::MIN_STEP_BUDGET)
+            .min(raymarch::MAX_STEP_BUDGET);
         self.fov_y_deg = self.fov_y_deg.max(MIN_FOV_Y_DEG).min(MAX_FOV_Y_DEG);
     }
 }

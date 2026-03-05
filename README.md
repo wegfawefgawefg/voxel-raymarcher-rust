@@ -26,9 +26,9 @@ cargo build --release
 - `M`: toggle orbit/fly mode
 - `Tab` (fly mode): toggle mouse-look capture
 - `-` / `=`: draw distance down/up
-- `,` / `.`: ray step size down/up
+- `,` / `.`: DDA step budget down/up
 - `[` / `]`: FOV down/up
-- `Backspace`: reset draw distance, step size, and FOV
+- `Backspace`: reset draw distance, step budget, and FOV
 - `F1`: render scale `1x` (native)
 - `F2`: render scale `1/2x`
 - `F3`: render scale `1/4x`
@@ -45,6 +45,7 @@ UI overlay (top-right) shows FPS, draw budget settings, and render counters:
 - empty chunk skips
 - render scale + internal render resolution
 - chunk generation budget
+- simulation/raymarch/upload/frame timings
 
 The `+/-` overlay buttons are clickable when mouse-look is unlocked.
 

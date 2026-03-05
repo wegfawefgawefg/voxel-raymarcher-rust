@@ -6,8 +6,8 @@ use crate::camera::Camera;
 use crate::viewplane::Viewplane;
 use crate::world::{MaterialId, World, CHUNK_SIZE};
 
-pub const MIN_STEP_SIZE: f32 = 0.02;
-pub const MAX_STEP_SIZE: f32 = 4.0;
+pub const MIN_STEP_BUDGET: f32 = 0.02;
+pub const MAX_STEP_BUDGET: f32 = 4.0;
 pub const MAX_RAY_STEPS: i32 = 4096;
 
 const DDA_EPSILON: f32 = 0.0001;
@@ -26,7 +26,7 @@ pub struct RaymarchInput<'a> {
     pub camera: &'a Camera,
     pub viewplane: &'a Viewplane,
     pub draw_distance: f32,
-    pub march_step_size: f32,
+    pub voxel_step_budget: f32,
 }
 
 #[derive(Copy, Clone)]
@@ -240,11 +240,14 @@ pub fn draw_voxels(
 ) -> RenderStats {
     debug_assert_eq!(pixels.len(), (width as usize) * (height as usize) * 4);
 
-    let step_size = input.march_step_size.max(MIN_STEP_SIZE).min(MAX_STEP_SIZE);
-    let mut num_ray_steps = (input.draw_distance / step_size).ceil() as i32;
+    let step_budget = input
+        .voxel_step_budget
+        .max(MIN_STEP_BUDGET)
+        .min(MAX_STEP_BUDGET);
+    let mut num_ray_steps = (input.draw_distance / step_budget).ceil() as i32;
     num_ray_steps = num_ray_steps.max(1).min(MAX_RAY_STEPS);
 
-    let draw_distance = num_ray_steps as f32 * step_size;
+    let draw_distance = num_ray_steps as f32 * step_budget;
     let inv_draw_distance = 1.0 / draw_distance.max(0.0001);
     let sky_limit = input.world.get_above_floor_level() as f32;
     let world_min = Vec3::ZERO;

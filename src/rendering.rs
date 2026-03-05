@@ -1,5 +1,6 @@
 use glam::{UVec2, Vec2, Vec3};
 use raylib::prelude::*;
+use std::time::Instant;
 
 use crate::raymarch::{self, RaymarchInput};
 use crate::state::{ResolutionScale, State};
@@ -13,7 +14,7 @@ struct RenderSignature {
     viewplane_size: Vec2,
     viewplane_distance: f32,
     draw_distance: f32,
-    march_step_size: f32,
+    voxel_step_budget: f32,
     render_width: u32,
     render_height: u32,
 }
@@ -58,14 +59,18 @@ impl Renderer {
             viewplane_size: state.viewplane.size,
             viewplane_distance: state.camera.viewplane_distance,
             draw_distance: state.draw_distance,
-            march_step_size: state.march_step_size,
+            voxel_step_budget: state.voxel_step_budget,
             render_width,
             render_height,
         };
 
         if self.last_signature == Some(signature) {
+            state.last_frame_timings.reused_render = true;
+            state.last_frame_timings.raymarch_ms = 0.0;
+            state.last_frame_timings.upload_ms = 0.0;
             return;
         }
+        state.last_frame_timings.reused_render = false;
 
         let ray_len = (render_width as usize)
             .saturating_mul(render_height as usize)
@@ -74,19 +79,22 @@ impl Renderer {
             self.ray_buffer.resize(ray_len, 0);
         }
 
+        let raymarch_start = Instant::now();
         state.last_render_stats = raymarch::draw_voxels(
             RaymarchInput {
                 world: &state.world,
                 camera: &state.camera,
                 viewplane: &state.viewplane,
                 draw_distance: state.draw_distance,
-                march_step_size: state.march_step_size,
+                voxel_step_budget: state.voxel_step_budget,
             },
             &mut self.ray_buffer,
             render_width as i32,
             render_height as i32,
         );
+        state.last_frame_timings.raymarch_ms = raymarch_start.elapsed().as_secs_f32() * 1000.0;
 
+        let upload_start = Instant::now();
         if render_width == self.dims.x && render_height == self.dims.y {
             self.texture.update_texture(&self.ray_buffer);
         } else {
@@ -100,6 +108,7 @@ impl Renderer {
             );
             self.texture.update_texture(&self.upload_buffer);
         }
+        state.last_frame_timings.upload_ms = upload_start.elapsed().as_secs_f32() * 1000.0;
 
         self.last_signature = Some(signature);
     }

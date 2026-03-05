@@ -37,6 +37,7 @@ These instructions apply to this repository.
 - Avoid deep trait hierarchies and unnecessary generics in core rendering paths.
 - Prefer concrete types and explicit data layouts.
 - Minimize hidden control flow and macro-heavy patterns.
+- Avoid deeply nested control flow in functions; prefer early `continue`/`return` and helper extraction when nesting exceeds about 3 levels.
 
 ## Performance Mindset
 

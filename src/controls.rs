@@ -3,7 +3,7 @@ use raylib::prelude::*;
 
 use crate::state::{Mode, ResolutionScale, State, DEFAULT_DRAW_DISTANCE};
 use crate::ui_overlay;
-use crate::{MARCH_STEP_SIZE, UP};
+use crate::{UP, VOXEL_STEP_BUDGET};
 
 const DISTANCE_FACTOR: f32 = 1.1;
 const STEP_FACTOR: f32 = 1.1;
@@ -121,14 +121,14 @@ pub fn process_events_and_input(rl: &mut RaylibHandle, state: &mut State) {
         state.draw_distance *= DISTANCE_FACTOR;
     }
     if rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_COMMA) {
-        state.march_step_size /= STEP_FACTOR;
+        state.voxel_step_budget /= STEP_FACTOR;
     }
     if rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_PERIOD) {
-        state.march_step_size *= STEP_FACTOR;
+        state.voxel_step_budget *= STEP_FACTOR;
     }
     if rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_BACKSPACE) {
         state.draw_distance = DEFAULT_DRAW_DISTANCE;
-        state.march_step_size = MARCH_STEP_SIZE;
+        state.voxel_step_budget = VOXEL_STEP_BUDGET;
         state.apply_fov_y_deg(53.130104);
     }
     if rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_LEFT_BRACKET) {
@@ -177,10 +177,10 @@ pub fn process_events_and_input(rl: &mut RaylibHandle, state: &mut State) {
             state.draw_distance *= DISTANCE_FACTOR;
         }
         if ui_overlay::point_in_rect(ui_mouse, layout.step_dec) {
-            state.march_step_size /= STEP_FACTOR;
+            state.voxel_step_budget /= STEP_FACTOR;
         }
         if ui_overlay::point_in_rect(ui_mouse, layout.step_inc) {
-            state.march_step_size *= STEP_FACTOR;
+            state.voxel_step_budget *= STEP_FACTOR;
         }
         if ui_overlay::point_in_rect(ui_mouse, layout.fov_dec) {
             state.apply_fov_y_deg(state.fov_y_deg / FOV_FACTOR);
