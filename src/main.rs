@@ -2,12 +2,18 @@ use glam::{UVec2, Vec3};
 use raylib::prelude::*;
 use raylib::{ffi::SetTraceLogLevel, prelude::TraceLogLevel};
 
+mod app_state;
 mod camera;
-mod sketch;
+mod controls;
+mod raymarch;
+mod rendering;
+mod simulation;
+mod ui_overlay;
 mod viewplane;
 mod world;
+mod world_generation;
 
-const TIMESTEP: f32 = 1.0 / sketch::FRAMES_PER_SECOND as f32;
+const TIMESTEP: f32 = 1.0 / app_state::FRAMES_PER_SECOND as f32;
 const DIMS: UVec2 = UVec2::new(240 / 2, 160 / 2);
 const NUM_RAY_STEPS: i32 = 128;
 const MARCH_STEP_SIZE: f32 = 0.2;
@@ -16,7 +22,7 @@ const CHUNK_GEN_RADIUS: i32 = 1;
 const WORLD_SIZE: usize = 256;
 
 fn main() {
-    let mut state = sketch::State::new();
+    let mut state = app_state::State::new();
     let (mut rl, rlt) = raylib::init().title("Voxels").build();
     unsafe {
         SetTraceLogLevel(TraceLogLevel::LOG_WARNING as i32);
@@ -31,9 +37,6 @@ fn main() {
     }
 
     center_window(&mut rl, window_dims);
-    let mouse_scale = DIMS.as_vec2() / window_dims.as_vec2();
-    rl.set_mouse_scale(mouse_scale.x, mouse_scale.y);
-    state.mouse_scale = mouse_scale;
     if state.mouse_look_locked {
         rl.disable_cursor();
     } else {
@@ -48,19 +51,16 @@ fn main() {
         });
 
     while state.running && !rl.window_should_close() {
-        let current_screen_dims = UVec2::new(rl.get_screen_width() as u32, rl.get_screen_height() as u32);
-        state.mouse_scale = DIMS.as_vec2() / current_screen_dims.as_vec2();
-        rl.set_mouse_scale(state.mouse_scale.x, state.mouse_scale.y);
         state.fps = rl.get_fps() as i32;
 
-        sketch::process_events_and_input(&mut rl, &mut state);
+        controls::process_events_and_input(&mut rl, &mut state);
 
         let dt = rl.get_frame_time();
         state.time_since_last_update += dt;
         while state.time_since_last_update > TIMESTEP {
             state.time_since_last_update -= TIMESTEP;
 
-            sketch::step(&mut rl, &mut state);
+            simulation::step(&mut rl, &mut state);
         }
 
         let mut draw_handle = rl.begin_drawing(&rlt);
@@ -68,7 +68,7 @@ fn main() {
             let low_res_draw_handle =
                 &mut draw_handle.begin_texture_mode(&rlt, &mut render_texture);
             low_res_draw_handle.clear_background(Color::BLACK);
-            sketch::draw(&state, low_res_draw_handle);
+            rendering::draw_scene(&mut state, low_res_draw_handle);
         }
         scale_and_blit_render_texture_to_window(
             &mut draw_handle,
@@ -76,7 +76,7 @@ fn main() {
             fullscreen,
             window_dims,
         );
-        sketch::draw_ui_overlay(&state, &mut draw_handle);
+        rendering::draw_ui_overlay(&state, &mut draw_handle);
     }
 }
 

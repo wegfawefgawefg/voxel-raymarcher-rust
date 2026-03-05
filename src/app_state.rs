@@ -1,0 +1,145 @@
+use glam::{Vec2, Vec3};
+
+use crate::camera::Camera;
+use crate::raymarch::{self, RenderStats};
+use crate::viewplane::Viewplane;
+use crate::world::{Block, World};
+use crate::{DIMS, MARCH_STEP_SIZE, NUM_RAY_STEPS, WORLD_SIZE};
+
+pub const FRAMES_PER_SECOND: u32 = 60;
+
+const MIN_DRAW_DISTANCE: f32 = 2.0;
+const MAX_DRAW_DISTANCE: f32 = 2000.0;
+const MIN_FOV_Y_DEG: f32 = 25.0;
+const MAX_FOV_Y_DEG: f32 = 120.0;
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum Mode {
+    Orbit,
+    Fly,
+}
+
+pub struct State {
+    pub running: bool,
+    pub time_since_last_update: f32,
+
+    pub world: Box<World>,
+    pub camera: Box<Camera>,
+    pub viewplane: Box<Viewplane>,
+
+    pub mode: Mode,
+    pub draw_distance: f32,
+    pub march_step_size: f32,
+    pub fov_y_deg: f32,
+    pub fps: i32,
+    pub mouse_look_locked: bool,
+    pub last_render_stats: RenderStats,
+}
+
+impl State {
+    pub fn new() -> Self {
+        let mut world = Box::new(World::new(WORLD_SIZE));
+        world.gen_floor(Block::new(255, 255, 255, 255));
+        world.gen_cube(
+            Vec3::new(1.0, world.get_above_floor_level() as f32 - 1.0, 1.0),
+            Vec3::new(1.0, 2.0, 1.0),
+            Block::new(255, 0, 0, 255),
+        );
+
+        let cube_color = Block::new(255, 255, 255, 255);
+        world.gen_cube(
+            Vec3::new(0.0, world.get_above_floor_level() as f32 - 1.0, 0.0),
+            Vec3::new(1.0, 1.0, 1.0),
+            cube_color,
+        );
+        world.gen_cube(
+            Vec3::new(
+                0.0,
+                world.get_above_floor_level() as f32 - 1.0,
+                world.dim as f32 - 1.0,
+            ),
+            Vec3::new(1.0, 1.0, 1.0),
+            cube_color,
+        );
+        world.gen_cube(
+            Vec3::new(
+                world.dim as f32 - 1.0,
+                world.get_above_floor_level() as f32 - 1.0,
+                0.0,
+            ),
+            Vec3::new(1.0, 1.0, 1.0),
+            cube_color,
+        );
+        world.gen_cube(
+            Vec3::new(
+                world.dim as f32 - 1.0,
+                world.get_above_floor_level() as f32 - 1.0,
+                world.dim as f32 - 1.0,
+            ),
+            Vec3::new(1.0, 1.0, 1.0),
+            cube_color,
+        );
+
+        let glass = Block::new(180, 220, 255, 85);
+        world.gen_cube(
+            Vec3::new(8.0, world.get_above_floor_level() as f32 - 10.0, 8.0),
+            Vec3::new(1.0, 10.0, 8.0),
+            glass,
+        );
+
+        let camera = Box::new(Camera::new(
+            Vec3::new(0.0, world.get_above_floor_level() as f32, 0.0),
+            Vec3::new(0.0, 0.0, -1.0),
+            3.0,
+        ));
+        let viewplane = Box::new(Viewplane::new(Vec2::new(4.0, 3.0), 4.0 / 3.0));
+
+        let fov_y_deg =
+            (2.0 * ((viewplane.size.y * 0.5) / camera.viewplane_distance).atan()).to_degrees();
+
+        Self {
+            running: true,
+            time_since_last_update: 0.0,
+            world,
+            camera,
+            viewplane,
+            mode: Mode::Fly,
+            draw_distance: NUM_RAY_STEPS as f32 * MARCH_STEP_SIZE,
+            march_step_size: MARCH_STEP_SIZE,
+            fov_y_deg,
+            fps: 0,
+            mouse_look_locked: true,
+            last_render_stats: RenderStats::default(),
+        }
+    }
+
+    pub fn current_fov_y_deg(&self) -> f32 {
+        let distance = self.camera.viewplane_distance.max(0.001);
+        (2.0 * ((self.viewplane.size.y * 0.5) / distance).atan()).to_degrees()
+    }
+
+    pub fn sync_fov_y_from_viewplane(&mut self) {
+        self.fov_y_deg = self.current_fov_y_deg();
+    }
+
+    pub fn apply_fov_y_deg(&mut self, new_fov_y_deg: f32) {
+        self.fov_y_deg = new_fov_y_deg.max(MIN_FOV_Y_DEG).min(MAX_FOV_Y_DEG);
+        let distance = self.camera.viewplane_distance.max(0.001);
+        let aspect = DIMS.x as f32 / DIMS.y as f32;
+        let half_height = (self.fov_y_deg.to_radians() * 0.5).tan() * distance;
+        let viewplane_height = half_height * 2.0;
+        self.viewplane.size = Vec2::new(viewplane_height * aspect, viewplane_height);
+    }
+
+    pub fn clamp_render_budget(&mut self) {
+        self.draw_distance = self
+            .draw_distance
+            .max(MIN_DRAW_DISTANCE)
+            .min(MAX_DRAW_DISTANCE);
+        self.march_step_size = self
+            .march_step_size
+            .max(raymarch::MIN_STEP_SIZE)
+            .min(raymarch::MAX_STEP_SIZE);
+        self.fov_y_deg = self.fov_y_deg.max(MIN_FOV_Y_DEG).min(MAX_FOV_Y_DEG);
+    }
+}

@@ -24,8 +24,20 @@ cargo build --release
 - `T/G`: viewplane distance
 - `Left Shift`: faster movement/rotation
 - `M`: toggle orbit/fly mode
+- `Tab` (fly mode): toggle mouse-look capture
+- `-` / `=`: draw distance down/up
+- `,` / `.`: ray step size down/up
+- `[` / `]`: FOV down/up
+- `Backspace`: reset draw distance, step size, and FOV
 - `R`: reset camera
 - `Esc`: quit
+
+UI overlay (top-right) shows FPS, draw budget settings, and render counters:
+- rays cast/hit
+- voxel traversal steps
+- empty chunk skips
+
+The `+/-` overlay buttons are clickable when mouse-look is unlocked.
 
 ## Profiling (Linux perf + inferno)
 
