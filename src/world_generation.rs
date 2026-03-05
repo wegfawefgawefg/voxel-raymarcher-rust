@@ -1,14 +1,10 @@
-use glam::{UVec3, Vec3};
+use glam::Vec3;
 use noise::{NoiseFn, Perlin};
 use raylib::color::Color;
 
-use crate::world::{Block, MaterialId, Object, World, CHUNK_SIZE};
+use crate::world::{Block, World, CHUNK_SIZE};
 
 impl World {
-    pub fn gen_empty_voxel_array(dim: usize) -> Vec<MaterialId> {
-        vec![0; dim * dim * dim]
-    }
-
     pub fn gen_cube(&mut self, pos: Vec3, size: Vec3, color: Color) {
         let material = self.intern_material(color);
         for x in 0..size.x as usize {
@@ -24,36 +20,6 @@ impl World {
                 }
             }
         }
-        self.genned_objects.push(Object { pos, size, color });
-    }
-
-    pub fn gen_sphere(&mut self, pos: Vec3, radius: f32, color: Color) {
-        let material = self.intern_material(color);
-        let radius = radius as i32;
-        for x in -radius..=radius {
-            for y in -radius..=radius {
-                for z in -radius..=radius {
-                    if Vec3::new(x as f32, y as f32, z as f32).length() <= radius as f32 {
-                        let voxel_pos = pos + Vec3::new(x as f32, y as f32, z as f32);
-                        self.set_voxel_material_i32(
-                            voxel_pos.x as i32,
-                            voxel_pos.y as i32,
-                            voxel_pos.z as i32,
-                            material,
-                        );
-                    }
-                }
-            }
-        }
-        self.genned_objects.push(Object {
-            pos,
-            size: Vec3::new(
-                radius as f32 * 2.0,
-                radius as f32 * 2.0,
-                radius as f32 * 2.0,
-            ),
-            color,
-        });
     }
 
     pub fn get_lower_void(&self) -> usize {
@@ -76,37 +42,6 @@ impl World {
                 self.set_voxel_material_i32(x, floor_level, z, material);
             }
         }
-    }
-
-    pub fn gen_sin_terrain(&mut self, chunk_pos: UVec3) {
-        if self.is_chunk_genned(chunk_pos) {
-            return;
-        }
-
-        let grass = self.intern_material(Color::new(56, 183, 100, 255));
-        let dirt = self.intern_material(Color::new(122, 72, 65, 255));
-        let base_x = chunk_pos.x as i32 * CHUNK_SIZE as i32;
-        let base_z = chunk_pos.z as i32 * CHUNK_SIZE as i32;
-        let floor = self.get_floor_level() as i32;
-        let lower_void = self.get_lower_void() as i32;
-        let frequency = std::f32::consts::PI * 2.0 / CHUNK_SIZE as f32;
-
-        for x in 0..CHUNK_SIZE as i32 {
-            for z in 0..CHUNK_SIZE as i32 {
-                let world_x = base_x + x;
-                let world_z = base_z + z;
-                let y_offset = (world_x as f32 * frequency).sin() * 2.0
-                    + (world_z as f32 * frequency).cos() * 2.0;
-                let surface_y = floor + y_offset as i32;
-
-                self.set_voxel_material_i32(world_x, surface_y, world_z, grass);
-                for y in (surface_y + 1)..lower_void {
-                    self.set_voxel_material_i32(world_x, y, world_z, dirt);
-                }
-            }
-        }
-
-        self.mark_chunk_generated(chunk_pos);
     }
 
     pub fn gen_terrain_column(&mut self, chunk_x: u32, chunk_z: u32) {
@@ -149,9 +84,5 @@ impl World {
         }
 
         self.mark_terrain_column_generated(chunk_x, chunk_z);
-    }
-
-    pub fn gen_terrain(&mut self, chunk_pos: UVec3) {
-        self.gen_terrain_column(chunk_pos.x, chunk_pos.z);
     }
 }

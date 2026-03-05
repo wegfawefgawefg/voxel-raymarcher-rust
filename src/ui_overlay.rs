@@ -1,8 +1,8 @@
 use glam::Vec2;
 use raylib::prelude::*;
 
-use crate::app_state::{Mode, State};
 use crate::raymarch::{MAX_RAY_STEPS, MAX_STEP_SIZE, MIN_STEP_SIZE};
+use crate::state::{Mode, State};
 use crate::DIMS;
 
 pub struct UiLayout {

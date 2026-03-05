@@ -1,7 +1,7 @@
 use raylib::prelude::*;
 
-use crate::app_state::State;
 use crate::raymarch::{self, RaymarchInput};
+use crate::state::State;
 use crate::ui_overlay;
 
 pub fn draw_scene(state: &mut State, d: &mut RaylibTextureMode<RaylibDrawHandle>) {

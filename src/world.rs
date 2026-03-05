@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use glam::{UVec3, Vec3};
+use glam::Vec3;
 use raylib::color::Color;
 
 pub type Block = Color;
@@ -12,13 +12,6 @@ const CHUNK_MASK: i32 = CHUNK_SIZE as i32 - 1;
 const CHUNK_VOLUME: usize = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
 const AIR_COLOR: Color = Color::new(0, 0, 0, 0);
 const AIR_MATERIAL: MaterialId = 0;
-
-#[derive(Debug, Clone)]
-pub struct Object {
-    pub pos: Vec3,
-    pub size: Vec3,
-    pub color: Block,
-}
 
 #[derive(Copy, Clone, Debug)]
 pub struct Material {
@@ -61,7 +54,6 @@ pub struct World {
     pub chunk_dim: usize,
     chunks: Vec<ChunkData>,
     terrain_columns_generated: Vec<bool>,
-    pub genned_objects: Vec<Object>,
     materials: Vec<Material>,
     material_lookup: HashMap<u32, MaterialId>,
 }
@@ -80,7 +72,6 @@ impl World {
             chunk_dim,
             chunks: (0..chunk_count).map(|_| ChunkData::new()).collect(),
             terrain_columns_generated: vec![false; chunk_dim * chunk_dim],
-            genned_objects: Vec::new(),
             materials: vec![Material {
                 color: AIR_COLOR,
                 is_transparent: false,
@@ -112,12 +103,6 @@ impl World {
         new_id
     }
 
-    pub fn is_chunk_genned(&self, chunk_pos: UVec3) -> bool {
-        self.chunk_meta(chunk_pos.x as i32, chunk_pos.y as i32, chunk_pos.z as i32)
-            .map(|meta| meta.generated)
-            .unwrap_or(false)
-    }
-
     #[inline]
     pub fn chunk_meta(&self, chunk_x: i32, chunk_y: i32, chunk_z: i32) -> Option<ChunkMeta> {
         if chunk_x < 0
@@ -132,73 +117,6 @@ impl World {
 
         let chunk_index = self.chunk_index(chunk_x as usize, chunk_y as usize, chunk_z as usize);
         Some(self.chunks[chunk_index].meta)
-    }
-
-    #[inline]
-    pub fn chunk_meta_from_voxel(&self, x: i32, y: i32, z: i32) -> Option<ChunkMeta> {
-        if x < 0
-            || y < 0
-            || z < 0
-            || x >= self.dim as i32
-            || y >= self.dim as i32
-            || z >= self.dim as i32
-        {
-            return None;
-        }
-
-        self.chunk_meta(
-            (x as usize >> CHUNK_SHIFT) as i32,
-            (y as usize >> CHUNK_SHIFT) as i32,
-            (z as usize >> CHUNK_SHIFT) as i32,
-        )
-    }
-
-    pub fn to_chunk_pos(&self, pos: Vec3) -> UVec3 {
-        UVec3::new(
-            (pos.x / CHUNK_SIZE as f32).floor() as u32,
-            (pos.y / CHUNK_SIZE as f32).floor() as u32,
-            (pos.z / CHUNK_SIZE as f32).floor() as u32,
-        )
-    }
-
-    pub fn get_chunk_world_pos(&self, chunk_pos: UVec3) -> Vec3 {
-        Vec3::new(
-            chunk_pos.x as f32 * CHUNK_SIZE as f32,
-            chunk_pos.y as f32 * CHUNK_SIZE as f32,
-            chunk_pos.z as f32 * CHUNK_SIZE as f32,
-        )
-    }
-
-    pub fn get_voxel(&self, pos: Vec3) -> Block {
-        self.get_material(self.get_voxel_material_i32(pos.x as i32, pos.y as i32, pos.z as i32))
-            .color
-    }
-
-    #[inline]
-    pub fn get_voxel_material_i32(&self, x: i32, y: i32, z: i32) -> MaterialId {
-        if x < 0
-            || y < 0
-            || z < 0
-            || x >= self.dim as i32
-            || y >= self.dim as i32
-            || z >= self.dim as i32
-        {
-            return AIR_MATERIAL;
-        }
-
-        let chunk_x = (x as usize) >> CHUNK_SHIFT;
-        let chunk_y = (y as usize) >> CHUNK_SHIFT;
-        let chunk_z = (z as usize) >> CHUNK_SHIFT;
-        let chunk_index = self.chunk_index(chunk_x, chunk_y, chunk_z);
-        let chunk = &self.chunks[chunk_index];
-        let Some(voxels) = &chunk.voxels else {
-            return AIR_MATERIAL;
-        };
-
-        let in_chunk_x = (x & CHUNK_MASK) as usize;
-        let in_chunk_y = (y & CHUNK_MASK) as usize;
-        let in_chunk_z = (z & CHUNK_MASK) as usize;
-        voxels[self.voxel_index(in_chunk_x, in_chunk_y, in_chunk_z)]
     }
 
     #[inline]
@@ -218,11 +136,6 @@ impl World {
         let in_chunk_y = (y & CHUNK_MASK) as usize;
         let in_chunk_z = (z & CHUNK_MASK) as usize;
         voxels[self.voxel_index(in_chunk_x, in_chunk_y, in_chunk_z)]
-    }
-
-    pub fn set_voxel(&mut self, pos: Vec3, color: Color) {
-        let material_id = self.intern_material(color);
-        self.set_voxel_material_i32(pos.x as i32, pos.y as i32, pos.z as i32, material_id);
     }
 
     #[inline]
@@ -282,36 +195,12 @@ impl World {
         }
     }
 
-    pub fn is_in_bounds(&self, pos: Vec3) -> bool {
-        pos.x >= 0.0
-            && pos.x < self.dim as f32
-            && pos.y >= 0.0
-            && pos.y < self.dim as f32
-            && pos.z >= 0.0
-            && pos.z < self.dim as f32
-    }
-
-    pub fn is_in_chunk_bounds(&self, chunk_pos: UVec3) -> bool {
-        chunk_pos.x < self.chunk_dim as u32
-            && chunk_pos.y < self.chunk_dim as u32
-            && chunk_pos.z < self.chunk_dim as u32
-    }
-
     pub fn get_center(&self) -> Vec3 {
         Vec3::new(
             self.dim as f32 / 2.0,
             self.dim as f32 / 2.0,
             self.dim as f32 / 2.0,
         )
-    }
-
-    pub fn reset(&mut self) {
-        self.genned_objects.clear();
-        self.terrain_columns_generated.fill(false);
-        for chunk in self.chunks.iter_mut() {
-            chunk.voxels = None;
-            chunk.meta = ChunkMeta::default();
-        }
     }
 
     #[inline]
@@ -327,18 +216,6 @@ impl World {
             let chunk_index = self.chunk_index(chunk_x as usize, chunk_y, chunk_z as usize);
             self.chunks[chunk_index].meta.generated = true;
         }
-    }
-
-    pub(crate) fn mark_chunk_generated(&mut self, chunk_pos: UVec3) {
-        if !self.is_in_chunk_bounds(chunk_pos) {
-            return;
-        }
-        let chunk_index = self.chunk_index(
-            chunk_pos.x as usize,
-            chunk_pos.y as usize,
-            chunk_pos.z as usize,
-        );
-        self.chunks[chunk_index].meta.generated = true;
     }
 
     #[inline]

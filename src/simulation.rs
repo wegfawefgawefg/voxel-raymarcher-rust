@@ -1,7 +1,7 @@
 use glam::Vec3;
 use raylib::prelude::*;
 
-use crate::app_state::{Mode, State};
+use crate::state::{Mode, State};
 use crate::world::CHUNK_SIZE;
 use crate::CHUNK_GEN_RADIUS;
 

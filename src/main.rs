@@ -2,18 +2,18 @@ use glam::{UVec2, Vec3};
 use raylib::prelude::*;
 use raylib::{ffi::SetTraceLogLevel, prelude::TraceLogLevel};
 
-mod app_state;
 mod camera;
 mod controls;
 mod raymarch;
 mod rendering;
 mod simulation;
+mod state;
 mod ui_overlay;
 mod viewplane;
 mod world;
 mod world_generation;
 
-const TIMESTEP: f32 = 1.0 / app_state::FRAMES_PER_SECOND as f32;
+const TIMESTEP: f32 = 1.0 / state::FRAMES_PER_SECOND as f32;
 const DIMS: UVec2 = UVec2::new(240 / 2, 160 / 2);
 const NUM_RAY_STEPS: i32 = 128;
 const MARCH_STEP_SIZE: f32 = 0.2;
@@ -22,7 +22,7 @@ const CHUNK_GEN_RADIUS: i32 = 1;
 const WORLD_SIZE: usize = 256;
 
 fn main() {
-    let mut state = app_state::State::new();
+    let mut state = state::State::new();
     let (mut rl, rlt) = raylib::init().title("Voxels").build();
     unsafe {
         SetTraceLogLevel(TraceLogLevel::LOG_WARNING as i32);

@@ -1,7 +1,7 @@
 use glam::Vec2;
 use raylib::prelude::*;
 
-use crate::app_state::{Mode, State};
+use crate::state::{Mode, State};
 use crate::ui_overlay;
 use crate::{MARCH_STEP_SIZE, NUM_RAY_STEPS, UP};
 

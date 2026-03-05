@@ -41,10 +41,6 @@ impl Camera {
         self.get_down() * -1.0
     }
 
-    pub fn get_left(&self) -> Vec3 {
-        self.get_right() * -1.0
-    }
-
     pub fn rotate(&mut self, axis: Vec3, angle: f32) {
         let rotation = Quat::from_axis_angle(axis.normalize(), angle);
         self.dir = rotation * self.dir;
