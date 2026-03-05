@@ -12,38 +12,42 @@ pub struct Object {
     pub color: Block,
 }
 
-// define chunk type
-type Chunk = Vec<Vec<Vec<Block>>>;
+type Chunk = Vec<Block>;
 pub const AIR: Block = Block::new(0, 0, 0, 0);
 pub const CHUNK_SIZE: usize = 16;
+const CHUNK_SHIFT: usize = 4;
+const CHUNK_MASK: i32 = CHUNK_SIZE as i32 - 1;
+const CHUNK_VOLUME: usize = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
 
 #[derive(Debug)]
 pub struct World {
     pub dim: usize,
     pub chunk_dim: usize,
-    pub chunks: Vec<Vec<Vec<Chunk>>>,
-    pub generated_chunks: Vec<Vec<Vec<bool>>>,
+    pub chunks: Vec<Chunk>,
+    pub generated_chunks: Vec<bool>,
     pub genned_objects: Vec<Object>,
 }
 
 pub fn gen_air_chunk() -> Chunk {
-    vec![vec![vec![AIR; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE]
+    vec![AIR; CHUNK_VOLUME]
 }
 
 impl World {
     pub fn new(dim: usize) -> Self {
+        debug_assert_eq!(1usize << CHUNK_SHIFT, CHUNK_SIZE);
         let chunk_dim = dim / CHUNK_SIZE;
+        let chunk_count = chunk_dim * chunk_dim * chunk_dim;
         Self {
             dim,
             chunk_dim,
-            chunks: vec![vec![vec![gen_air_chunk(); chunk_dim]; chunk_dim]; chunk_dim],
-            generated_chunks: vec![vec![vec![false; chunk_dim]; chunk_dim]; chunk_dim],
+            chunks: (0..chunk_count).map(|_| gen_air_chunk()).collect(),
+            generated_chunks: vec![false; chunk_count],
             genned_objects: Vec::new(),
         }
     }
 
     pub fn is_chunk_genned(&self, chunk_pos: UVec3) -> bool {
-        self.generated_chunks[chunk_pos.x as usize][chunk_pos.y as usize][chunk_pos.z as usize]
+        self.generated_chunks[self.chunk_index(chunk_pos.x as usize, chunk_pos.y as usize, chunk_pos.z as usize)]
     }
 
     pub fn to_chunk_pos(&self, pos: Vec3) -> UVec3 {
@@ -63,28 +67,59 @@ impl World {
     }
 
     pub fn get_voxel(&self, pos: Vec3) -> Block {
-        if !self.is_in_bounds(pos) {
+        self.get_voxel_i32(pos.x as i32, pos.y as i32, pos.z as i32)
+    }
+
+    #[inline]
+    pub fn get_voxel_i32(&self, x: i32, y: i32, z: i32) -> Block {
+        if x < 0
+            || y < 0
+            || z < 0
+            || x >= self.dim as i32
+            || y >= self.dim as i32
+            || z >= self.dim as i32
+        {
             return AIR;
         }
-        let chunk_pos = self.to_chunk_pos(pos);
 
-        // Check if there's a chunk at the position
-        let chunk = &self.chunks[chunk_pos.x as usize][chunk_pos.y as usize][chunk_pos.z as usize];
-        let pos_in_chunk = pos.as_uvec3() - self.get_chunk_world_pos(chunk_pos).as_uvec3();
-        chunk[pos_in_chunk.x as usize][pos_in_chunk.y as usize][pos_in_chunk.z as usize]
+        let chunk_x = (x as usize) >> CHUNK_SHIFT;
+        let chunk_y = (y as usize) >> CHUNK_SHIFT;
+        let chunk_z = (z as usize) >> CHUNK_SHIFT;
+        let chunk_index = self.chunk_index(chunk_x, chunk_y, chunk_z);
+
+        let in_chunk_x = (x & CHUNK_MASK) as usize;
+        let in_chunk_y = (y & CHUNK_MASK) as usize;
+        let in_chunk_z = (z & CHUNK_MASK) as usize;
+        let voxel_index = self.voxel_index(in_chunk_x, in_chunk_y, in_chunk_z);
+
+        self.chunks[chunk_index][voxel_index]
     }
 
     pub fn set_voxel(&mut self, pos: Vec3, block: Block) {
-        if !self.is_in_bounds(pos) {
+        let x = pos.x as i32;
+        let y = pos.y as i32;
+        let z = pos.z as i32;
+        if x < 0
+            || y < 0
+            || z < 0
+            || x >= self.dim as i32
+            || y >= self.dim as i32
+            || z >= self.dim as i32
+        {
             return;
         }
-        let chunk_pos = self.to_chunk_pos(pos);
-        let pos_in_chunk = pos.as_uvec3()
-            - chunk_pos * UVec3::new(CHUNK_SIZE as u32, CHUNK_SIZE as u32, CHUNK_SIZE as u32);
 
-        let chunk =
-            &mut self.chunks[chunk_pos.x as usize][chunk_pos.y as usize][chunk_pos.z as usize];
-        chunk[pos_in_chunk.x as usize][pos_in_chunk.y as usize][pos_in_chunk.z as usize] = block;
+        let chunk_x = (x as usize) >> CHUNK_SHIFT;
+        let chunk_y = (y as usize) >> CHUNK_SHIFT;
+        let chunk_z = (z as usize) >> CHUNK_SHIFT;
+        let chunk_index = self.chunk_index(chunk_x, chunk_y, chunk_z);
+
+        let in_chunk_x = (x & CHUNK_MASK) as usize;
+        let in_chunk_y = (y & CHUNK_MASK) as usize;
+        let in_chunk_z = (z & CHUNK_MASK) as usize;
+        let voxel_index = self.voxel_index(in_chunk_x, in_chunk_y, in_chunk_z);
+
+        self.chunks[chunk_index][voxel_index] = block;
     }
 
     pub fn is_in_bounds(&self, pos: Vec3) -> bool {
@@ -112,15 +147,14 @@ impl World {
 
     pub fn reset(&mut self) {
         self.genned_objects.clear();
-        self.chunks = vec![
-            vec![vec![gen_air_chunk(); self.chunk_dim]; self.chunk_dim];
-            self.chunk_dim
-        ];
-        self.generated_chunks = vec![vec![vec![false; self.chunk_dim]; self.chunk_dim]; self.chunk_dim];
+        for chunk in self.chunks.iter_mut() {
+            chunk.fill(AIR);
+        }
+        self.generated_chunks.fill(false);
     }
 
-    pub fn gen_empty_voxel_array(dim: usize) -> Vec<Vec<Vec<Block>>> {
-        vec![vec![vec![AIR; dim]; dim]; dim]
+    pub fn gen_empty_voxel_array(dim: usize) -> Vec<Block> {
+        vec![AIR; dim * dim * dim]
     }
 
     pub fn gen_cube(&mut self, pos: Vec3, size: Vec3, block: Color) {
@@ -170,7 +204,8 @@ impl World {
 
     pub fn gen_sin_terrain(&mut self, chunk_pos: UVec3) {
         // bail if already generated
-        if self.generated_chunks[chunk_pos.x as usize][chunk_pos.y as usize][chunk_pos.z as usize] {
+        let chunk_index = self.chunk_index(chunk_pos.x as usize, chunk_pos.y as usize, chunk_pos.z as usize);
+        if self.generated_chunks[chunk_index] {
             return;
         }
 
@@ -217,12 +252,13 @@ impl World {
             }
         }
 
-        self.generated_chunks[chunk_pos.x as usize][chunk_pos.y as usize][chunk_pos.z as usize] = true;
+        self.generated_chunks[chunk_index] = true;
     }
 
     pub fn gen_terrain(&mut self, chunk_pos: UVec3) {
         // bail if already generated
-        if self.generated_chunks[chunk_pos.x as usize][chunk_pos.y as usize][chunk_pos.z as usize] {
+        let chunk_index = self.chunk_index(chunk_pos.x as usize, chunk_pos.y as usize, chunk_pos.z as usize);
+        if self.generated_chunks[chunk_index] {
             return;
         }
 
@@ -264,7 +300,7 @@ impl World {
             }
         }
 
-        self.generated_chunks[chunk_pos.x as usize][chunk_pos.y as usize][chunk_pos.z as usize] = true;
+        self.generated_chunks[chunk_index] = true;
     }
 
     pub fn get_floor_level(&self) -> usize {
@@ -282,5 +318,15 @@ impl World {
                 self.set_voxel(Vec3::new(x as f32, floor_level as f32, z as f32), block);
             }
         }
+    }
+
+    #[inline]
+    fn chunk_index(&self, chunk_x: usize, chunk_y: usize, chunk_z: usize) -> usize {
+        chunk_x + chunk_y * self.chunk_dim + chunk_z * self.chunk_dim * self.chunk_dim
+    }
+
+    #[inline]
+    fn voxel_index(&self, x: usize, y: usize, z: usize) -> usize {
+        x + y * CHUNK_SIZE + z * CHUNK_SIZE * CHUNK_SIZE
     }
 }

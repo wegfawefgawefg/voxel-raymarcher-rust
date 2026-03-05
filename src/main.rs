@@ -1,4 +1,4 @@
-use glam::{IVec2, UVec2, Vec3};
+use glam::{UVec2, Vec3};
 use raylib::prelude::*;
 use raylib::{ffi::SetTraceLogLevel, prelude::TraceLogLevel};
 
@@ -33,6 +33,8 @@ fn main() {
     center_window(&mut rl, window_dims);
     let mouse_scale = DIMS.as_vec2() / window_dims.as_vec2();
     rl.set_mouse_scale(mouse_scale.x, mouse_scale.y);
+    state.mouse_scale = mouse_scale;
+    rl.disable_cursor();
 
     let mut render_texture = rl
         .load_render_texture(&rlt, DIMS.x, DIMS.y)
@@ -42,6 +44,11 @@ fn main() {
         });
 
     while state.running && !rl.window_should_close() {
+        let current_screen_dims = UVec2::new(rl.get_screen_width() as u32, rl.get_screen_height() as u32);
+        state.mouse_scale = DIMS.as_vec2() / current_screen_dims.as_vec2();
+        rl.set_mouse_scale(state.mouse_scale.x, state.mouse_scale.y);
+        state.fps = rl.get_fps() as i32;
+
         sketch::process_events_and_input(&mut rl, &mut state);
 
         let dt = rl.get_frame_time();
@@ -65,15 +72,30 @@ fn main() {
             fullscreen,
             window_dims,
         );
+        sketch::draw_ui_overlay(&state, &mut draw_handle);
     }
 }
 
 pub fn center_window(rl: &mut raylib::RaylibHandle, window_dims: UVec2) {
-    let screen_dims = IVec2::new(rl.get_screen_width(), rl.get_screen_height());
-    let screen_center = screen_dims / 2;
-    let window_center = window_dims.as_ivec2() / 2;
-    let offset = IVec2::new(screen_center.x, screen_center.y + window_center.y);
-    rl.set_window_position(offset.x, offset.y);
+    // Prefer the left-most monitor in a multi-monitor setup.
+    let monitor_count = raylib::core::window::get_monitor_count();
+    let mut target_monitor = raylib::core::window::get_current_monitor();
+    let mut best_x = i32::MAX;
+    for monitor in 0..monitor_count {
+        let pos = raylib::core::window::get_monitor_position(monitor);
+        let px = pos.x as i32;
+        if px < best_x {
+            best_x = px;
+            target_monitor = monitor;
+        }
+    }
+
+    let monitor_pos = raylib::core::window::get_monitor_position(target_monitor);
+    let monitor_width = raylib::core::window::get_monitor_width(target_monitor);
+    let monitor_height = raylib::core::window::get_monitor_height(target_monitor);
+    let x = monitor_pos.x as i32 + (monitor_width - window_dims.x as i32) / 2;
+    let y = monitor_pos.y as i32 + (monitor_height - window_dims.y as i32) / 2;
+    rl.set_window_position(x, y);
     rl.set_target_fps(144);
 }
 
