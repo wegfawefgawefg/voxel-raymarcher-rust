@@ -7,7 +7,6 @@ use crate::world::{Block, World};
 use crate::{DIMS, MARCH_STEP_SIZE, WORLD_SIZE};
 
 pub const FRAMES_PER_SECOND: u32 = 60;
-pub const TARGET_FPS: i32 = 60;
 pub const DEFAULT_DRAW_DISTANCE: f32 = 128.0;
 
 const MIN_DRAW_DISTANCE: f32 = 2.0;
@@ -19,6 +18,30 @@ const MAX_FOV_Y_DEG: f32 = 120.0;
 pub enum Mode {
     Orbit,
     Fly,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum ResolutionScale {
+    X1,
+    XHalf,
+    XQuarter,
+    XEighth,
+    XSixteenth,
+    XThirtySecond,
+}
+
+impl ResolutionScale {
+    #[inline]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::X1 => "1x",
+            Self::XHalf => "1/2x",
+            Self::XQuarter => "1/4x",
+            Self::XEighth => "1/8x",
+            Self::XSixteenth => "1/16x",
+            Self::XThirtySecond => "1/32x",
+        }
+    }
 }
 
 pub struct State {
@@ -34,8 +57,7 @@ pub struct State {
     pub march_step_size: f32,
     pub fov_y_deg: f32,
     pub fps: i32,
-    pub auto_quality: bool,
-    pub quality_scale: f32,
+    pub resolution_scale: ResolutionScale,
     pub render_width: u32,
     pub render_height: u32,
     pub chunk_gen_budget_per_step: usize,
@@ -113,8 +135,7 @@ impl State {
             march_step_size: MARCH_STEP_SIZE,
             fov_y_deg,
             fps: 0,
-            auto_quality: true,
-            quality_scale: 1.0,
+            resolution_scale: ResolutionScale::X1,
             render_width: DIMS.x,
             render_height: DIMS.y,
             chunk_gen_budget_per_step: 2,

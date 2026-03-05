@@ -2,11 +2,8 @@ use glam::{UVec2, Vec2, Vec3};
 use raylib::prelude::*;
 
 use crate::raymarch::{self, RaymarchInput};
-use crate::state::{State, TARGET_FPS};
+use crate::state::{ResolutionScale, State};
 use crate::ui_overlay;
-
-const MIN_QUALITY_SCALE: f32 = 0.35;
-const MAX_QUALITY_SCALE: f32 = 1.0;
 
 #[derive(Copy, Clone, PartialEq)]
 struct RenderSignature {
@@ -49,14 +46,8 @@ impl Renderer {
     }
 
     pub fn draw_scene(&mut self, state: &mut State) {
-        update_quality_scale(state);
-
-        let render_width = ((self.dims.x as f32 * state.quality_scale).round() as u32)
-            .max(1)
-            .min(self.dims.x);
-        let render_height = ((self.dims.y as f32 * state.quality_scale).round() as u32)
-            .max(1)
-            .min(self.dims.y);
+        let render_width = scaled_dimension(self.dims.x, state.resolution_scale);
+        let render_height = scaled_dimension(self.dims.y, state.resolution_scale);
         state.render_width = render_width;
         state.render_height = render_height;
 
@@ -150,23 +141,15 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
 }
 
 #[inline]
-fn update_quality_scale(state: &mut State) {
-    if !state.auto_quality {
-        state.quality_scale = state
-            .quality_scale
-            .clamp(MIN_QUALITY_SCALE, MAX_QUALITY_SCALE);
-        return;
+fn scaled_dimension(size: u32, scale: ResolutionScale) -> u32 {
+    match scale {
+        ResolutionScale::X1 => size,
+        ResolutionScale::XHalf => (size / 2).max(1),
+        ResolutionScale::XQuarter => (size / 4).max(1),
+        ResolutionScale::XEighth => (size / 8).max(1),
+        ResolutionScale::XSixteenth => (size / 16).max(1),
+        ResolutionScale::XThirtySecond => (size / 32).max(1),
     }
-
-    if state.fps < TARGET_FPS - 2 {
-        state.quality_scale *= 0.97;
-    } else if state.fps > TARGET_FPS + 8 {
-        state.quality_scale *= 1.01;
-    }
-
-    state.quality_scale = state
-        .quality_scale
-        .clamp(MIN_QUALITY_SCALE, MAX_QUALITY_SCALE);
 }
 
 fn upscale_nearest_rgba(

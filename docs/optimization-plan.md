@@ -39,7 +39,7 @@
 - [x] Terrain generated once per `(chunk_x, chunk_z)` column.
 - [x] Cached chunk-meta lookup per traversed chunk in DDA loop.
 - [x] Framebuffer + single texture upload per frame (removed per-pixel draw calls).
-- [x] Adaptive quality scaler around 60 FPS target (auto/manual quality mode).
+- [x] Fixed render-scale presets (`1x`, `1/2x`, `1/4x`) with nearest-neighbor upscale.
 - [x] Opaque-chunk fast path (skip blend math when chunk has no transparency).
 - [x] Frame reuse when scene/camera/world signature is unchanged.
 - [x] Material precompute (`alpha`, premultiplied channels) for cheaper blend loop.

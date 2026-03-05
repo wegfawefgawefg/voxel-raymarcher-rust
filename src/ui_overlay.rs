@@ -138,6 +138,13 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
         Color::GREEN,
     );
     d.draw_text(
+        &format!("Scale: {}", state.resolution_scale.label()),
+        text_x + (layout.panel.width as i32 / 2) - 8,
+        panel_y + pad + 44,
+        18,
+        Color::WHITE,
+    );
+    d.draw_text(
         &format!("Mode: {}", mode_label),
         text_x + (layout.panel.width as i32 / 2) - 8,
         panel_y + pad + 22,
@@ -167,11 +174,7 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
         Color::WHITE,
     );
     d.draw_text(
-        &format!(
-            "Quality: {:>5.1}% ({})",
-            state.quality_scale * 100.0,
-            if state.auto_quality { "AUTO" } else { "MANUAL" }
-        ),
+        &format!("Render Scale: {}", state.resolution_scale.label()),
         text_x,
         metric_start_y,
         16,
@@ -234,7 +237,7 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
     draw_button(d, layout.fov_inc, "+");
 
     d.draw_text(
-        "Keys: Tab, [-]/[+], [,]/[.], [[/]], F1 AQ, F2/F3 Q, F4/F5 Gen, Backspace",
+        "Keys: Tab, [-]/[+], [,]/[.], [[/]], F1..F6 Scale, F7/F8 Gen, Backspace",
         16,
         screen_height - 28,
         18,
