@@ -87,11 +87,9 @@ impl State {
             glass,
         );
 
-        let camera = Box::new(Camera::new(
-            Vec3::new(0.0, world.get_above_floor_level() as f32, 0.0),
-            Vec3::new(0.0, 0.0, -1.0),
-            3.0,
-        ));
+        let camera_pos = Vec3::new(0.0, world.get_above_floor_level() as f32, 0.0);
+        let camera_dir = (world.get_center() - camera_pos).normalize();
+        let camera = Box::new(Camera::new(camera_pos, camera_dir, 3.0));
         let viewplane = Box::new(Viewplane::new(Vec2::new(4.0, 3.0), 4.0 / 3.0));
 
         let fov_y_deg =
