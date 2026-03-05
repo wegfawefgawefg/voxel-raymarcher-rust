@@ -116,8 +116,8 @@ impl State {
             glass,
         );
 
-        let camera_pos = Vec3::new(0.0, world.get_above_floor_level() as f32, 0.0);
-        let camera_dir = (world.get_center() - camera_pos).normalize();
+        let camera_pos = world.get_center();
+        let camera_dir = Vec3::new(0.0, 0.2, 1.0).normalize();
         let camera = Box::new(Camera::new(camera_pos, camera_dir, 3.0));
         let viewplane = Box::new(Viewplane::new(Vec2::new(4.0, 3.0), 4.0 / 3.0));
 
@@ -135,7 +135,7 @@ impl State {
             march_step_size: MARCH_STEP_SIZE,
             fov_y_deg,
             fps: 0,
-            resolution_scale: ResolutionScale::X1,
+            resolution_scale: ResolutionScale::XQuarter,
             render_width: DIMS.x,
             render_height: DIMS.y,
             chunk_gen_budget_per_step: 2,
