@@ -276,6 +276,8 @@ impl World {
 
         // Generate terrain within the chunk
         let scale = 0.1; // Scale factor for Perlin noise
+        let water_level = self.get_floor_level().saturating_sub(6) as f32;
+        let water_color = Color::new(50, 120, 190, 130);
         for x in 0..CHUNK_SIZE {
             for z in 0..CHUNK_SIZE {
                 // World position of the current voxel
@@ -287,8 +289,17 @@ impl World {
                 let world_y = base_pos.y + y_offset as f32;
 
                 // Set the block green, and all blocks down to the floor brown
-                let gentle_green = Color::new(56, 183, 100, 100);
+                let gentle_green = Color::new(56, 183, 100, 255);
                 self.set_voxel(Vec3::new(world_x, world_y, world_z), gentle_green);
+
+                // Transparent water only in lower areas, above terrain surface.
+                if world_y > water_level {
+                    let mut water_y = water_level;
+                    while water_y < world_y {
+                        self.set_voxel(Vec3::new(world_x, water_y, world_z), water_color);
+                        water_y += 1.0;
+                    }
+                }
 
                 // Fill to the floor with brown
                 let dirt_color = Color::new(122, 72, 65, 255);

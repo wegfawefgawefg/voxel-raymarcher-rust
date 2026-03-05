@@ -86,6 +86,14 @@ impl State {
             cube_color,
         );
 
+        // Transparent reference geometry for compositing tests.
+        let glass = Block::new(180, 220, 255, 85);
+        world.gen_cube(
+            Vec3::new(8.0, world.get_above_floor_level() as f32 - 10.0, 8.0),
+            Vec3::new(1.0, 10.0, 8.0),
+            glass,
+        );
+
         // fill the whole world with cube
         // world.gen_cube(
         //     Vec3::new(0.0, 0.0, 0.0),
@@ -122,7 +130,7 @@ impl State {
             march_step_size: MARCH_STEP_SIZE,
             fps: 0,
             mouse_scale: Vec2::ONE,
-            mouse_look_locked: true,
+            mouse_look_locked: false,
         }
     }
 }
@@ -180,6 +188,16 @@ pub fn process_events_and_input(rl: &mut RaylibHandle, state: &mut State) {
             Mode::Orbit => Mode::Fly,
             Mode::Fly => Mode::Orbit,
         };
+        match state.mode {
+            Mode::Fly => {
+                state.mouse_look_locked = true;
+                rl.disable_cursor();
+            }
+            Mode::Orbit => {
+                state.mouse_look_locked = false;
+                rl.enable_cursor();
+            }
+        }
     }
 
     // if r is pressed, reset camera
@@ -188,7 +206,7 @@ pub fn process_events_and_input(rl: &mut RaylibHandle, state: &mut State) {
     }
 
     // Toggle freelook mouse capture.
-    if rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_TAB) {
+    if state.mode == Mode::Fly && rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_TAB) {
         state.mouse_look_locked = !state.mouse_look_locked;
         if state.mouse_look_locked {
             rl.disable_cursor();

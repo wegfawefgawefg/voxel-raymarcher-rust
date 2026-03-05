@@ -34,7 +34,11 @@ fn main() {
     let mouse_scale = DIMS.as_vec2() / window_dims.as_vec2();
     rl.set_mouse_scale(mouse_scale.x, mouse_scale.y);
     state.mouse_scale = mouse_scale;
-    rl.disable_cursor();
+    if state.mouse_look_locked {
+        rl.disable_cursor();
+    } else {
+        rl.enable_cursor();
+    }
 
     let mut render_texture = rl
         .load_render_texture(&rlt, DIMS.x, DIMS.y)
