@@ -29,6 +29,9 @@ cargo build --release
 - `,` / `.`: ray step size down/up
 - `[` / `]`: FOV down/up
 - `Backspace`: reset draw distance, step size, and FOV
+- `F1`: toggle auto quality mode (targets 60 FPS)
+- `F2` / `F3`: quality down/up (manual mode)
+- `F4` / `F5`: chunk generation budget down/up
 - `R`: reset camera
 - `Esc`: quit
 
@@ -36,6 +39,8 @@ UI overlay (top-right) shows FPS, draw budget settings, and render counters:
 - rays cast/hit
 - voxel traversal steps
 - empty chunk skips
+- quality mode + quality scale
+- chunk generation budget
 
 The `+/-` overlay buttons are clickable when mouse-look is unlocked.
 

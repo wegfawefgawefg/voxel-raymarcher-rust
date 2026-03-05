@@ -4,7 +4,6 @@ use raylib::prelude::*;
 use crate::camera::Camera;
 use crate::viewplane::Viewplane;
 use crate::world::{MaterialId, World, CHUNK_SIZE};
-use crate::DIMS;
 
 pub const MIN_STEP_SIZE: f32 = 0.02;
 pub const MAX_STEP_SIZE: f32 = 4.0;
@@ -234,11 +233,12 @@ fn chunk_exit_t(
 
 pub fn draw_voxels(
     input: RaymarchInput<'_>,
-    d: &mut RaylibTextureMode<RaylibDrawHandle>,
+    pixels: &mut [u8],
+    width: i32,
+    height: i32,
 ) -> RenderStats {
     let mut stats = RenderStats::default();
-    let width = DIMS.x as i32;
-    let height = DIMS.y as i32;
+    debug_assert_eq!(pixels.len(), (width as usize) * (height as usize) * 4);
 
     let step_size = input.march_step_size.max(MIN_STEP_SIZE).min(MAX_STEP_SIZE);
     let mut num_ray_steps = (input.draw_distance / step_size).ceil() as i32;
@@ -255,7 +255,7 @@ pub fn draw_voxels(
         .top_left_corner_from_perspective_of(input.camera);
     let right = input.viewplane.get_right_from_perspective_of(input.camera);
     let down = input.viewplane.get_down_from_perspective_of(input.camera);
-    let pixel_size = input.viewplane.size / DIMS.as_vec2();
+    let pixel_size = input.viewplane.size / glam::Vec2::new(width as f32, height as f32);
     let right_step = right * pixel_size.x;
     let down_step = down * pixel_size.y;
     let mut row_target = tl + right_step * 0.5 + down_step * 0.5;
@@ -290,6 +290,7 @@ pub fn draw_voxels(
                     let mut last_chunk_y = i32::MIN;
                     let mut last_chunk_z = i32::MIN;
                     let mut current_chunk_empty = false;
+                    let mut current_chunk_has_transparency = false;
 
                     while t <= t_exit && remaining_steps > 0 {
                         if dda.voxel_x < 0
@@ -315,6 +316,7 @@ pub fn draw_voxels(
                                 break;
                             };
                             current_chunk_empty = chunk_meta.is_empty();
+                            current_chunk_has_transparency = chunk_meta.has_transparency;
                             last_chunk_x = chunk_x;
                             last_chunk_y = chunk_y;
                             last_chunk_z = chunk_z;
@@ -345,12 +347,18 @@ pub fn draw_voxels(
                             }
 
                             let material = input.world.get_material(material_id);
-                            let color = material.color;
-                            let alpha = color.a as f32 / 255.0;
-                            accumulated_r += color.r as f32 * alpha * transmittance;
-                            accumulated_g += color.g as f32 * alpha * transmittance;
-                            accumulated_b += color.b as f32 * alpha * transmittance;
-                            transmittance *= 1.0 - alpha;
+                            if !current_chunk_has_transparency {
+                                let color = material.color;
+                                accumulated_r = color.r as f32;
+                                accumulated_g = color.g as f32;
+                                accumulated_b = color.b as f32;
+                                break;
+                            }
+
+                            accumulated_r += material.premul_r * transmittance;
+                            accumulated_g += material.premul_g * transmittance;
+                            accumulated_b += material.premul_b * transmittance;
+                            transmittance *= 1.0 - material.alpha;
                             if transmittance <= 0.01 {
                                 break;
                             }
@@ -381,7 +389,11 @@ pub fn draw_voxels(
                     color = Color::new(blue.x as u8, blue.y as u8, blue.z as u8, 255);
                 }
             }
-            d.draw_rectangle(x, y, 1, 1, color);
+            let pixel_index = ((y as usize) * (width as usize) + (x as usize)) * 4;
+            pixels[pixel_index] = color.r;
+            pixels[pixel_index + 1] = color.g;
+            pixels[pixel_index + 2] = color.b;
+            pixels[pixel_index + 3] = 255;
             target += right_step;
         }
         row_target += down_step;

@@ -17,7 +17,7 @@ pub struct UiLayout {
 
 pub fn ui_layout(screen_width: i32, _screen_height: i32) -> UiLayout {
     let panel_width = 280.0;
-    let panel_height = 244.0;
+    let panel_height = 286.0;
     let panel_x = screen_width as f32 - panel_width - 16.0;
     let panel_y = 16.0;
     let button_w = 28.0;
@@ -80,7 +80,8 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
     let layout = ui_layout(screen_width, screen_height);
 
     let step_size = state.march_step_size.max(MIN_STEP_SIZE).min(MAX_STEP_SIZE);
-    let mut num_ray_steps = (state.draw_distance / step_size).ceil() as i32;
+    let effective_draw_distance = state.draw_distance * state.quality_scale;
+    let mut num_ray_steps = (effective_draw_distance / step_size).ceil() as i32;
     num_ray_steps = num_ray_steps.max(1).min(MAX_RAY_STEPS);
     let draw_distance = num_ray_steps as f32 * step_size;
     let pixel_budget = DIMS.x as i64 * DIMS.y as i64 * num_ray_steps as i64;
@@ -156,16 +157,34 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
         Color::WHITE,
     );
     d.draw_text(
-        &format!("Steps: {}  Budget: {}", num_ray_steps, pixel_budget),
+        &format!(
+            "Quality: {:>5.1}% ({})",
+            state.quality_scale * 100.0,
+            if state.auto_quality { "AUTO" } else { "MANUAL" }
+        ),
         layout.panel.x as i32 + 10,
         layout.panel.y as i32 + 164,
+        16,
+        Color::new(220, 220, 220, 255),
+    );
+    d.draw_text(
+        &format!("Chunk Gen Budget: {}", state.chunk_gen_budget_per_step),
+        layout.panel.x as i32 + 10,
+        layout.panel.y as i32 + 184,
+        16,
+        Color::new(220, 220, 220, 255),
+    );
+    d.draw_text(
+        &format!("Steps: {}  Budget: {}", num_ray_steps, pixel_budget),
+        layout.panel.x as i32 + 10,
+        layout.panel.y as i32 + 204,
         16,
         Color::new(200, 200, 200, 255),
     );
     d.draw_text(
         &format!("Rays: {}  Hits: {}", stats.rays_cast, stats.rays_hit),
         layout.panel.x as i32 + 10,
-        layout.panel.y as i32 + 186,
+        layout.panel.y as i32 + 224,
         16,
         Color::new(200, 200, 200, 255),
     );
@@ -175,14 +194,14 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
             stats.voxel_steps, avg_steps_per_ray
         ),
         layout.panel.x as i32 + 10,
-        layout.panel.y as i32 + 206,
+        layout.panel.y as i32 + 244,
         16,
         Color::new(200, 200, 200, 255),
     );
     d.draw_text(
         &format!("Empty Chunk Skips: {}", stats.empty_chunk_skips),
         layout.panel.x as i32 + 10,
-        layout.panel.y as i32 + 226,
+        layout.panel.y as i32 + 264,
         16,
         Color::new(200, 200, 200, 255),
     );
@@ -195,7 +214,7 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
     draw_button(d, layout.fov_inc, "+");
 
     d.draw_text(
-        "Keys: Tab mouse-lock, [-]/[+] dist, [,]/[.] step, [[/]] FOV, Backspace reset",
+        "Keys: Tab, [-]/[+], [,]/[.], [[/]], F1 AQ, F2/F3 Q, F4/F5 Gen, Backspace",
         16,
         screen_height - 28,
         18,

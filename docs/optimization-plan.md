@@ -38,7 +38,25 @@
 - [x] Kept 3D chunk grid.
 - [x] Terrain generated once per `(chunk_x, chunk_z)` column.
 - [x] Cached chunk-meta lookup per traversed chunk in DDA loop.
+- [x] Framebuffer + single texture upload per frame (removed per-pixel draw calls).
+- [x] Adaptive quality scaler around 60 FPS target (auto/manual quality mode).
+- [x] Opaque-chunk fast path (skip blend math when chunk has no transparency).
+- [x] Frame reuse when scene/camera/world signature is unchanged.
+- [x] Material precompute (`alpha`, premultiplied channels) for cheaper blend loop.
+- [x] Chunk generation budget per simulation step (smoother frame time).
 - [ ] Heightmap-assisted skip (deferred intentionally).
+
+## March 2026 Questions
+
+- Are we skipping air chunks entirely?
+  - Yes. During DDA traversal, if chunk metadata says `non_air_voxels == 0`, the ray jumps
+    directly to that chunk boundary instead of stepping voxel-by-voxel through it.
+- Are chunks 3D?
+  - Yes. Storage is a full 3D chunk grid (`chunk_x`, `chunk_y`, `chunk_z`) with `CHUNK_SIZE^3` voxels per chunk.
+- Is `CHUNK_SIZE = 16` reasonable?
+  - For current layout (`u16` material IDs), voxel payload is `16 * 16 * 16 * 2 = 8192` bytes/chunk.
+    That is generally cache-friendly for traversal and metadata checks while keeping chunk count manageable.
+  - `16` is a good default, but final choice should still be benchmarked against `8` and `32` for your camera/path mix.
 
 ## Notes on Heightmap-Assisted Skip
 

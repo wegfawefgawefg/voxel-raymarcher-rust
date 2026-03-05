@@ -7,6 +7,7 @@ use crate::world::{Block, World};
 use crate::{DIMS, MARCH_STEP_SIZE, NUM_RAY_STEPS, WORLD_SIZE};
 
 pub const FRAMES_PER_SECOND: u32 = 60;
+pub const TARGET_FPS: i32 = 60;
 
 const MIN_DRAW_DISTANCE: f32 = 2.0;
 const MAX_DRAW_DISTANCE: f32 = 2000.0;
@@ -32,6 +33,9 @@ pub struct State {
     pub march_step_size: f32,
     pub fov_y_deg: f32,
     pub fps: i32,
+    pub auto_quality: bool,
+    pub quality_scale: f32,
+    pub chunk_gen_budget_per_step: usize,
     pub mouse_look_locked: bool,
     pub last_render_stats: RenderStats,
 }
@@ -106,6 +110,9 @@ impl State {
             march_step_size: MARCH_STEP_SIZE,
             fov_y_deg,
             fps: 0,
+            auto_quality: true,
+            quality_scale: 1.0,
+            chunk_gen_budget_per_step: 2,
             mouse_look_locked: true,
             last_render_stats: RenderStats::default(),
         }

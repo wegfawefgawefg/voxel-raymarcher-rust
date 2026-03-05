@@ -8,9 +8,12 @@ use crate::{MARCH_STEP_SIZE, NUM_RAY_STEPS, UP};
 const DISTANCE_FACTOR: f32 = 1.1;
 const STEP_FACTOR: f32 = 1.1;
 const FOV_FACTOR: f32 = 1.05;
+const QUALITY_FACTOR: f32 = 1.05;
 const MOUSE_LOOK_SENSITIVITY: f32 = 0.0015;
 const MAX_VIEW_ALIGNMENT_WITH_UP: f32 = 0.995;
 const HIGH_SPEED_MULTIPLIER: f32 = 4.0;
+const MIN_QUALITY_SCALE: f32 = 0.35;
+const MAX_QUALITY_SCALE: f32 = 1.0;
 
 pub fn process_events_and_input(rl: &mut RaylibHandle, state: &mut State) {
     if rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_ESCAPE) {
@@ -137,7 +140,27 @@ pub fn process_events_and_input(rl: &mut RaylibHandle, state: &mut State) {
     if rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_RIGHT_BRACKET) {
         state.apply_fov_y_deg(state.fov_y_deg * FOV_FACTOR);
     }
+    if rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_F1) {
+        state.auto_quality = !state.auto_quality;
+    }
+    if rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_F2) {
+        state.quality_scale /= QUALITY_FACTOR;
+        state.auto_quality = false;
+    }
+    if rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_F3) {
+        state.quality_scale *= QUALITY_FACTOR;
+        state.auto_quality = false;
+    }
+    if rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_F4) {
+        state.chunk_gen_budget_per_step = state.chunk_gen_budget_per_step.saturating_sub(1).max(1);
+    }
+    if rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_F5) {
+        state.chunk_gen_budget_per_step = (state.chunk_gen_budget_per_step + 1).min(32);
+    }
     state.clamp_render_budget();
+    state.quality_scale = state
+        .quality_scale
+        .clamp(MIN_QUALITY_SCALE, MAX_QUALITY_SCALE);
 
     let screen_width = rl.get_screen_width();
     let screen_height = rl.get_screen_height();

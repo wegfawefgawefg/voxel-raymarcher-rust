@@ -17,6 +17,10 @@ const AIR_MATERIAL: MaterialId = 0;
 pub struct Material {
     pub color: Color,
     pub is_transparent: bool,
+    pub alpha: f32,
+    pub premul_r: f32,
+    pub premul_g: f32,
+    pub premul_b: f32,
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -54,6 +58,7 @@ pub struct World {
     pub chunk_dim: usize,
     chunks: Vec<ChunkData>,
     terrain_columns_generated: Vec<bool>,
+    revision: u64,
     materials: Vec<Material>,
     material_lookup: HashMap<u32, MaterialId>,
 }
@@ -72,9 +77,14 @@ impl World {
             chunk_dim,
             chunks: (0..chunk_count).map(|_| ChunkData::new()).collect(),
             terrain_columns_generated: vec![false; chunk_dim * chunk_dim],
+            revision: 0,
             materials: vec![Material {
                 color: AIR_COLOR,
                 is_transparent: false,
+                alpha: 0.0,
+                premul_r: 0.0,
+                premul_g: 0.0,
+                premul_b: 0.0,
             }],
             material_lookup,
         }
@@ -95,9 +105,14 @@ impl World {
         }
 
         let new_id = self.materials.len() as MaterialId;
+        let alpha = color.a as f32 / 255.0;
         self.materials.push(Material {
             color,
             is_transparent: color.a > 0 && color.a < 255,
+            alpha,
+            premul_r: color.r as f32 * alpha,
+            premul_g: color.g as f32 * alpha,
+            premul_b: color.b as f32 * alpha,
         });
         self.material_lookup.insert(key, new_id);
         new_id
@@ -185,6 +200,7 @@ impl World {
         }
 
         voxels[voxel_index] = material_id;
+        self.revision = self.revision.saturating_add(1);
         if new_non_air && material_transparent {
             chunk.meta.has_transparency = true;
         }
@@ -201,6 +217,11 @@ impl World {
             self.dim as f32 / 2.0,
             self.dim as f32 / 2.0,
         )
+    }
+
+    #[inline]
+    pub fn revision(&self) -> u64 {
+        self.revision
     }
 
     #[inline]

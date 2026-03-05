@@ -3,24 +3,50 @@ use raylib::prelude::*;
 
 use crate::state::{Mode, State};
 use crate::world::CHUNK_SIZE;
-use crate::CHUNK_GEN_RADIUS;
+
+const MIN_CHUNK_GEN_RADIUS: i32 = 1;
+const MAX_CHUNK_GEN_BUDGET: usize = 32;
 
 pub fn step(rl: &mut RaylibHandle, state: &mut State) {
     let cam_chunk_x = (state.camera.pos.x / CHUNK_SIZE as f32).floor() as i32;
     let cam_chunk_z = (state.camera.pos.z / CHUNK_SIZE as f32).floor() as i32;
     let chunk_dim = state.world.chunk_dim as i32;
+    let mut desired_chunk_radius = (state.draw_distance / CHUNK_SIZE as f32).ceil() as i32 + 1;
+    desired_chunk_radius = desired_chunk_radius.max(MIN_CHUNK_GEN_RADIUS);
+    desired_chunk_radius = desired_chunk_radius.min(chunk_dim.saturating_sub(1));
 
-    for x in -CHUNK_GEN_RADIUS..=CHUNK_GEN_RADIUS {
-        for z in -CHUNK_GEN_RADIUS..=CHUNK_GEN_RADIUS {
+    let scaled_budget = ((desired_chunk_radius as usize) + 1).saturating_mul(2);
+    let generation_budget = state
+        .chunk_gen_budget_per_step
+        .max(scaled_budget.min(MAX_CHUNK_GEN_BUDGET));
+
+    let mut candidates: Vec<(i32, u32, u32)> = Vec::new();
+    candidates.reserve(
+        ((desired_chunk_radius * 2 + 1) as usize)
+            .saturating_mul((desired_chunk_radius * 2 + 1) as usize),
+    );
+
+    for x in -desired_chunk_radius..=desired_chunk_radius {
+        for z in -desired_chunk_radius..=desired_chunk_radius {
             let chunk_x = cam_chunk_x + x;
             let chunk_z = cam_chunk_z + z;
             if chunk_x < 0 || chunk_x >= chunk_dim || chunk_z < 0 || chunk_z >= chunk_dim {
                 continue;
             }
-            state
+            if state
                 .world
-                .gen_terrain_column(chunk_x as u32, chunk_z as u32);
+                .is_terrain_column_generated(chunk_x as u32, chunk_z as u32)
+            {
+                continue;
+            }
+            let dist_sq = x * x + z * z;
+            candidates.push((dist_sq, chunk_x as u32, chunk_z as u32));
         }
+    }
+    candidates.sort_unstable_by_key(|c| c.0);
+
+    for (_, chunk_x, chunk_z) in candidates.into_iter().take(generation_budget) {
+        state.world.gen_terrain_column(chunk_x, chunk_z);
     }
 
     if state.mode == Mode::Orbit {
