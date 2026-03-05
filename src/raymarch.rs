@@ -1,5 +1,6 @@
 use glam::Vec3;
 use raylib::prelude::*;
+use rayon::prelude::*;
 
 use crate::camera::Camera;
 use crate::viewplane::Viewplane;
@@ -237,7 +238,6 @@ pub fn draw_voxels(
     width: i32,
     height: i32,
 ) -> RenderStats {
-    let mut stats = RenderStats::default();
     debug_assert_eq!(pixels.len(), (width as usize) * (height as usize) * 4);
 
     let step_size = input.march_step_size.max(MIN_STEP_SIZE).min(MAX_STEP_SIZE);
@@ -258,146 +258,159 @@ pub fn draw_voxels(
     let pixel_size = input.viewplane.size / glam::Vec2::new(width as f32, height as f32);
     let right_step = right * pixel_size.x;
     let down_step = down * pixel_size.y;
-    let mut row_target = tl + right_step * 0.5 + down_step * 0.5;
+    let row_start = tl + right_step * 0.5 + down_step * 0.5;
 
     let cam = input.camera.pos;
     let cam_y = cam.y;
+    let world_dim = input.world.dim as i32;
+    let row_stride = (width as usize) * 4;
 
-    for y in 0..height {
-        let mut target = row_target;
-        for x in 0..width {
-            stats.rays_cast += 1;
-            let ray = (target - cam).normalize();
-            let mut hit_anything = false;
-            let mut hit_distance = draw_distance;
+    pixels
+        .par_chunks_exact_mut(row_stride)
+        .enumerate()
+        .map(|(y, row)| {
+            let mut stats = RenderStats::default();
+            let mut target = row_start + down_step * y as f32;
+            for x in 0..width as usize {
+                stats.rays_cast += 1;
+                let ray = (target - cam).normalize();
+                let mut hit_anything = false;
+                let mut hit_distance = draw_distance;
 
-            let mut accumulated_r = 0.0;
-            let mut accumulated_g = 0.0;
-            let mut accumulated_b = 0.0;
-            let mut transmittance = 1.0;
+                let mut accumulated_r = 0.0;
+                let mut accumulated_g = 0.0;
+                let mut accumulated_b = 0.0;
+                let mut transmittance = 1.0;
 
-            if let Some((mut t_enter, mut t_exit)) =
-                ray_aabb_intersection(cam, ray, world_min, world_max)
-            {
-                t_enter = t_enter.max(0.0);
-                t_exit = t_exit.min(draw_distance);
+                if let Some((mut t_enter, mut t_exit)) =
+                    ray_aabb_intersection(cam, ray, world_min, world_max)
+                {
+                    t_enter = t_enter.max(0.0);
+                    t_exit = t_exit.min(draw_distance);
 
-                if t_enter <= t_exit {
-                    let mut t = t_enter;
-                    let mut dda = init_dda(cam, ray, t);
-                    let mut remaining_steps = num_ray_steps;
-                    let mut last_chunk_x = i32::MIN;
-                    let mut last_chunk_y = i32::MIN;
-                    let mut last_chunk_z = i32::MIN;
-                    let mut current_chunk_empty = false;
-                    let mut current_chunk_has_transparency = false;
+                    if t_enter <= t_exit {
+                        let mut t = t_enter;
+                        let mut dda = init_dda(cam, ray, t);
+                        let mut remaining_steps = num_ray_steps;
+                        let mut last_chunk_x = i32::MIN;
+                        let mut last_chunk_y = i32::MIN;
+                        let mut last_chunk_z = i32::MIN;
+                        let mut current_chunk_empty = false;
+                        let mut current_chunk_has_transparency = false;
 
-                    while t <= t_exit && remaining_steps > 0 {
-                        if dda.voxel_x < 0
-                            || dda.voxel_y < 0
-                            || dda.voxel_z < 0
-                            || dda.voxel_x >= input.world.dim as i32
-                            || dda.voxel_y >= input.world.dim as i32
-                            || dda.voxel_z >= input.world.dim as i32
-                        {
-                            break;
-                        }
-
-                        let chunk_x = dda.voxel_x.div_euclid(CHUNK_SIZE as i32);
-                        let chunk_y = dda.voxel_y.div_euclid(CHUNK_SIZE as i32);
-                        let chunk_z = dda.voxel_z.div_euclid(CHUNK_SIZE as i32);
-                        if chunk_x != last_chunk_x
-                            || chunk_y != last_chunk_y
-                            || chunk_z != last_chunk_z
-                        {
-                            let Some(chunk_meta) =
-                                input.world.chunk_meta(chunk_x, chunk_y, chunk_z)
-                            else {
-                                break;
-                            };
-                            current_chunk_empty = chunk_meta.is_empty();
-                            current_chunk_has_transparency = chunk_meta.has_transparency;
-                            last_chunk_x = chunk_x;
-                            last_chunk_y = chunk_y;
-                            last_chunk_z = chunk_z;
-                        }
-
-                        if current_chunk_empty {
-                            stats.empty_chunk_skips += 1;
-                            t = chunk_exit_t(cam, ray, chunk_x, chunk_y, chunk_z, t) + DDA_EPSILON;
-                            if t > t_exit {
-                                break;
-                            }
-                            dda = init_dda(cam, ray, t);
-                            continue;
-                        }
-
-                        stats.voxel_steps += 1;
-                        remaining_steps -= 1;
-
-                        let material_id = input.world.get_voxel_material_unchecked_i32(
-                            dda.voxel_x,
-                            dda.voxel_y,
-                            dda.voxel_z,
-                        );
-                        if material_id != AIR_MATERIAL_ID {
-                            if !hit_anything {
-                                hit_anything = true;
-                                hit_distance = t.max(0.0);
-                            }
-
-                            let material = input.world.get_material(material_id);
-                            if !current_chunk_has_transparency {
-                                let color = material.color;
-                                accumulated_r = color.r as f32;
-                                accumulated_g = color.g as f32;
-                                accumulated_b = color.b as f32;
+                        while t <= t_exit && remaining_steps > 0 {
+                            if dda.voxel_x < 0
+                                || dda.voxel_y < 0
+                                || dda.voxel_z < 0
+                                || dda.voxel_x >= world_dim
+                                || dda.voxel_y >= world_dim
+                                || dda.voxel_z >= world_dim
+                            {
                                 break;
                             }
 
-                            accumulated_r += material.premul_r * transmittance;
-                            accumulated_g += material.premul_g * transmittance;
-                            accumulated_b += material.premul_b * transmittance;
-                            transmittance *= 1.0 - material.alpha;
-                            if transmittance <= 0.01 {
-                                break;
+                            let chunk_x = dda.voxel_x.div_euclid(CHUNK_SIZE as i32);
+                            let chunk_y = dda.voxel_y.div_euclid(CHUNK_SIZE as i32);
+                            let chunk_z = dda.voxel_z.div_euclid(CHUNK_SIZE as i32);
+                            if chunk_x != last_chunk_x
+                                || chunk_y != last_chunk_y
+                                || chunk_z != last_chunk_z
+                            {
+                                let Some(chunk_meta) =
+                                    input.world.chunk_meta(chunk_x, chunk_y, chunk_z)
+                                else {
+                                    break;
+                                };
+                                current_chunk_empty = chunk_meta.is_empty();
+                                current_chunk_has_transparency = chunk_meta.has_transparency;
+                                last_chunk_x = chunk_x;
+                                last_chunk_y = chunk_y;
+                                last_chunk_z = chunk_z;
                             }
-                        }
 
-                        t = step_dda(&mut dda);
+                            if current_chunk_empty {
+                                stats.empty_chunk_skips += 1;
+                                t = chunk_exit_t(cam, ray, chunk_x, chunk_y, chunk_z, t)
+                                    + DDA_EPSILON;
+                                if t > t_exit {
+                                    break;
+                                }
+                                dda = init_dda(cam, ray, t);
+                                continue;
+                            }
+
+                            stats.voxel_steps += 1;
+                            remaining_steps -= 1;
+
+                            let material_id = input.world.get_voxel_material_unchecked_i32(
+                                dda.voxel_x,
+                                dda.voxel_y,
+                                dda.voxel_z,
+                            );
+                            if material_id != AIR_MATERIAL_ID {
+                                if !hit_anything {
+                                    hit_anything = true;
+                                    hit_distance = t.max(0.0);
+                                }
+
+                                let material = input.world.get_material(material_id);
+                                if !current_chunk_has_transparency {
+                                    let color = material.color;
+                                    accumulated_r = color.r as f32;
+                                    accumulated_g = color.g as f32;
+                                    accumulated_b = color.b as f32;
+                                    break;
+                                }
+
+                                accumulated_r += material.premul_r * transmittance;
+                                accumulated_g += material.premul_g * transmittance;
+                                accumulated_b += material.premul_b * transmittance;
+                                transmittance *= 1.0 - material.alpha;
+                                if transmittance <= 0.01 {
+                                    break;
+                                }
+                            }
+
+                            t = step_dda(&mut dda);
+                        }
                     }
                 }
-            }
 
-            let mut color = Color::BLACK;
-            if hit_anything {
-                stats.rays_hit += 1;
-                let mut brightness = 1.0 - hit_distance * inv_draw_distance;
-                brightness = brightness.max(0.0).min(1.0);
-                let lit_scale = 0.25 + brightness * 0.75;
-                color = Color::new(
-                    (accumulated_r * lit_scale).max(0.0).min(255.0) as u8,
-                    (accumulated_g * lit_scale).max(0.0).min(255.0) as u8,
-                    (accumulated_b * lit_scale).max(0.0).min(255.0) as u8,
-                    255,
-                );
-            } else {
-                let sky_probe_y = cam_y + ray.y * draw_distance;
-                if sky_probe_y < sky_limit {
-                    const BLUE: Vec3 = Vec3::new(0.0, 0.0, 255.0);
-                    let blue = BLUE * 0.1;
-                    color = Color::new(blue.x as u8, blue.y as u8, blue.z as u8, 255);
+                let mut color = Color::BLACK;
+                if hit_anything {
+                    stats.rays_hit += 1;
+                    let mut brightness = 1.0 - hit_distance * inv_draw_distance;
+                    brightness = brightness.max(0.0).min(1.0);
+                    let lit_scale = 0.25 + brightness * 0.75;
+                    color = Color::new(
+                        (accumulated_r * lit_scale).max(0.0).min(255.0) as u8,
+                        (accumulated_g * lit_scale).max(0.0).min(255.0) as u8,
+                        (accumulated_b * lit_scale).max(0.0).min(255.0) as u8,
+                        255,
+                    );
+                } else {
+                    let sky_probe_y = cam_y + ray.y * draw_distance;
+                    if sky_probe_y < sky_limit {
+                        const BLUE: Vec3 = Vec3::new(0.0, 0.0, 255.0);
+                        let blue = BLUE * 0.1;
+                        color = Color::new(blue.x as u8, blue.y as u8, blue.z as u8, 255);
+                    }
                 }
-            }
-            let pixel_index = ((y as usize) * (width as usize) + (x as usize)) * 4;
-            pixels[pixel_index] = color.r;
-            pixels[pixel_index + 1] = color.g;
-            pixels[pixel_index + 2] = color.b;
-            pixels[pixel_index + 3] = 255;
-            target += right_step;
-        }
-        row_target += down_step;
-    }
 
-    stats
+                let pixel_index = x * 4;
+                row[pixel_index] = color.r;
+                row[pixel_index + 1] = color.g;
+                row[pixel_index + 2] = color.b;
+                row[pixel_index + 3] = 255;
+                target += right_step;
+            }
+            stats
+        })
+        .reduce(RenderStats::default, |mut acc, row| {
+            acc.rays_cast += row.rays_cast;
+            acc.rays_hit += row.rays_hit;
+            acc.voxel_steps += row.voxel_steps;
+            acc.empty_chunk_skips += row.empty_chunk_skips;
+            acc
+        })
 }
