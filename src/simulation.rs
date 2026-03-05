@@ -20,6 +20,22 @@ pub fn step(rl: &mut RaylibHandle, state: &mut State) {
         .chunk_gen_budget_per_step
         .max(scaled_budget.min(MAX_CHUNK_GEN_BUDGET));
 
+    let mut completed_columns = Vec::with_capacity(generation_budget);
+    state
+        .terrain_worker
+        .drain_completed(generation_budget, &mut completed_columns);
+    for column in completed_columns {
+        if state
+            .world
+            .is_terrain_column_generated(column.chunk_x, column.chunk_z)
+        {
+            continue;
+        }
+        state
+            .world
+            .apply_terrain_column_heights(column.chunk_x, column.chunk_z, &column.surface_y);
+    }
+
     let mut candidates: Vec<(i32, u32, u32)> = Vec::new();
     candidates.reserve(
         ((desired_chunk_radius * 2 + 1) as usize)
@@ -45,8 +61,20 @@ pub fn step(rl: &mut RaylibHandle, state: &mut State) {
     }
     candidates.sort_unstable_by_key(|c| c.0);
 
-    for (_, chunk_x, chunk_z) in candidates.into_iter().take(generation_budget) {
+    let mut queued = 0usize;
+    for (_, chunk_x, chunk_z) in candidates {
+        if queued >= generation_budget {
+            break;
+        }
+        if state.terrain_worker.is_pending(chunk_x, chunk_z) {
+            continue;
+        }
+        if state.terrain_worker.enqueue(chunk_x, chunk_z) {
+            queued += 1;
+            continue;
+        }
         state.world.gen_terrain_column(chunk_x, chunk_z);
+        queued += 1;
     }
 
     if state.mode == Mode::Orbit {

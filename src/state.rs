@@ -2,6 +2,7 @@ use glam::{Vec2, Vec3};
 
 use crate::camera::Camera;
 use crate::raymarch::{self, RenderStats};
+use crate::terrain_worker::TerrainGenWorker;
 use crate::viewplane::Viewplane;
 use crate::world::{Block, World};
 use crate::{DIMS, VOXEL_STEP_BUDGET, WORLD_SIZE};
@@ -73,6 +74,7 @@ pub struct State {
     pub mouse_look_locked: bool,
     pub last_render_stats: RenderStats,
     pub last_frame_timings: FrameTimings,
+    pub terrain_worker: TerrainGenWorker,
 }
 
 impl State {
@@ -133,6 +135,7 @@ impl State {
 
         let fov_y_deg =
             (2.0 * ((viewplane.size.y * 0.5) / camera.viewplane_distance).atan()).to_degrees();
+        let terrain_worker = TerrainGenWorker::new(world.get_floor_level() as i32);
 
         Self {
             running: true,
@@ -152,6 +155,7 @@ impl State {
             mouse_look_locked: true,
             last_render_stats: RenderStats::default(),
             last_frame_timings: FrameTimings::default(),
+            terrain_worker,
         }
     }
 

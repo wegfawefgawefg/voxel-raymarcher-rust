@@ -9,6 +9,7 @@ mod raymarch;
 mod rendering;
 mod simulation;
 mod state;
+mod terrain_worker;
 mod ui_overlay;
 mod viewplane;
 mod world;

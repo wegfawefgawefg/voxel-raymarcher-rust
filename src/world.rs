@@ -37,6 +37,13 @@ impl ChunkMeta {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct TerrainMaterialIds {
+    pub grass: MaterialId,
+    pub dirt: MaterialId,
+    pub water: MaterialId,
+}
+
 #[derive(Debug)]
 struct ChunkData {
     voxels: Option<Vec<MaterialId>>,
@@ -61,6 +68,7 @@ pub struct World {
     revision: u64,
     materials: Vec<Material>,
     material_lookup: HashMap<u32, MaterialId>,
+    pub(crate) terrain_materials: Option<TerrainMaterialIds>,
 }
 
 impl World {
@@ -87,6 +95,7 @@ impl World {
                 premul_b: 0.0,
             }],
             material_lookup,
+            terrain_materials: None,
         }
     }
 
