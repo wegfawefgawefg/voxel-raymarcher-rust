@@ -2,6 +2,8 @@
 
 Voxel raymarching experiment in Rust (`raylib` + `glam`), with chunked terrain generation and CPU ray marching.
 
+For a larger/slower variant, see the `chunks` branch.
+
 ![image](image.png)
 ![scrot](scrot.png)
 
