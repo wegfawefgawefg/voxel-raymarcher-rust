@@ -2,6 +2,9 @@
 
 Voxel raymarching experiment in Rust (`raylib` + `glam`), with chunked terrain generation and CPU ray marching.
 
+![image](image.png)
+![scrot](scrot.png)
+
 ## Run
 
 ```bash
@@ -36,6 +39,7 @@ cargo build --release
 - `F5`: render scale `1/16x`
 - `F6`: render scale `1/32x`
 - `F7` / `F8`: chunk generation budget down/up
+- `F12`: export screenshot to `screenshots/`
 - `R`: reset camera
 - `Esc`: quit
 

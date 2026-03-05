@@ -270,7 +270,7 @@ pub fn draw_ui_overlay(state: &State, d: &mut RaylibDrawHandle) {
     draw_button(d, layout.fov_inc, "+");
 
     d.draw_text(
-        "Keys: Tab, [-]/[+], [,]/[.] StepBudget, [[/]], F1..F6 Scale, F7/F8 Gen, Backspace",
+        "Keys: Tab, [-]/[+], [,]/[.] StepBudget, [[/]], F1..F6 Scale, F7/F8 Gen, F12 Shot, Backspace",
         16,
         screen_height - 28,
         18,

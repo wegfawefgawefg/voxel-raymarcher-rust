@@ -42,6 +42,16 @@ pub struct TerrainMaterialIds {
     pub grass: MaterialId,
     pub dirt: MaterialId,
     pub water: MaterialId,
+    pub stone: MaterialId,
+    pub clay: MaterialId,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct FeatureMaterialIds {
+    pub basalt: MaterialId,
+    pub sandstone: MaterialId,
+    pub glass: MaterialId,
+    pub glow: MaterialId,
 }
 
 #[derive(Debug)]
@@ -69,6 +79,7 @@ pub struct World {
     materials: Vec<Material>,
     material_lookup: HashMap<u32, MaterialId>,
     pub(crate) terrain_materials: Option<TerrainMaterialIds>,
+    pub(crate) feature_materials: Option<FeatureMaterialIds>,
 }
 
 impl World {
@@ -96,6 +107,7 @@ impl World {
             }],
             material_lookup,
             terrain_materials: None,
+            feature_materials: None,
         }
     }
 

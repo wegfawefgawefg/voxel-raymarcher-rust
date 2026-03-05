@@ -48,7 +48,7 @@ fn main() {
         let frame_start = Instant::now();
         state.fps = rl.get_fps() as i32;
 
-        controls::process_events_and_input(&mut rl, &mut state);
+        controls::process_events_and_input(&mut rl, &rlt, &mut state);
 
         let simulation_start = Instant::now();
         let dt = rl.get_frame_time();

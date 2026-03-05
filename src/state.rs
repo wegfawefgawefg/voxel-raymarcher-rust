@@ -128,8 +128,13 @@ impl State {
             glass,
         );
 
-        let camera_pos = world.get_center();
-        let camera_dir = Vec3::new(0.0, 0.2, 1.0).normalize();
+        let world_center = world.get_center();
+        let camera_pos = Vec3::new(
+            world_center.x,
+            world.get_floor_level() as f32 - 28.0,
+            world_center.z - 24.0,
+        );
+        let camera_dir = Vec3::new(0.0, 0.12, 1.0).normalize();
         let camera = Box::new(Camera::new(camera_pos, camera_dir, 3.0));
         let viewplane = Box::new(Viewplane::new(Vec2::new(4.0, 3.0), 4.0 / 3.0));
 

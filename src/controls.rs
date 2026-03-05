@@ -1,5 +1,7 @@
 use glam::Vec2;
 use raylib::prelude::*;
+use std::fs;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::state::{Mode, ResolutionScale, State, DEFAULT_DRAW_DISTANCE};
 use crate::ui_overlay;
@@ -12,7 +14,7 @@ const MOUSE_LOOK_SENSITIVITY: f32 = 0.0015;
 const MAX_VIEW_ALIGNMENT_WITH_UP: f32 = 0.995;
 const HIGH_SPEED_MULTIPLIER: f32 = 4.0;
 
-pub fn process_events_and_input(rl: &mut RaylibHandle, state: &mut State) {
+pub fn process_events_and_input(rl: &mut RaylibHandle, thread: &RaylibThread, state: &mut State) {
     if rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_ESCAPE) {
         state.running = false;
     }
@@ -36,6 +38,9 @@ pub fn process_events_and_input(rl: &mut RaylibHandle, state: &mut State) {
 
     if rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_R) {
         state.camera.reset();
+    }
+    if rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_F12) {
+        export_screenshot(rl, thread);
     }
 
     if state.mode == Mode::Fly && rl.is_key_pressed(raylib::consts::KeyboardKey::KEY_TAB) {
@@ -190,4 +195,18 @@ pub fn process_events_and_input(rl: &mut RaylibHandle, state: &mut State) {
         }
         state.clamp_render_budget();
     }
+}
+
+fn export_screenshot(rl: &mut RaylibHandle, thread: &RaylibThread) {
+    if let Err(e) = fs::create_dir_all("screenshots") {
+        eprintln!("failed to create screenshots directory: {}", e);
+        return;
+    }
+
+    let unix_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis());
+    let filename = format!("screenshots/screenshot_{}.png", unix_ms);
+    rl.take_screenshot(thread, &filename);
+    println!("saved screenshot: {}", filename);
 }
