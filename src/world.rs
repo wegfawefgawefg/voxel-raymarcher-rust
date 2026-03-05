@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use glam::UVec3;
 use glam::Vec3;
 use noise::{NoiseFn, Perlin};
@@ -15,31 +13,37 @@ pub struct Object {
 }
 
 // define chunk type
-type Chunk = Vec<Vec<Vec<Option<Block>>>>;
+type Chunk = Vec<Vec<Vec<Block>>>;
+pub const AIR: Block = Block::new(0, 0, 0, 0);
 pub const CHUNK_SIZE: usize = 16;
 
 #[derive(Debug)]
 pub struct World {
     pub dim: usize,
     pub chunk_dim: usize,
-    pub chunks: HashMap<UVec3, Option<Chunk>>,
+    pub chunks: Vec<Vec<Vec<Chunk>>>,
+    pub generated_chunks: Vec<Vec<Vec<bool>>>,
     pub genned_objects: Vec<Object>,
 }
 
-pub enum GetVoxelResult {
-    Voxel { block: Block },
-    NoVoxel,
-    ChunkNotGenerated,
+pub fn gen_air_chunk() -> Chunk {
+    vec![vec![vec![AIR; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE]
 }
 
 impl World {
     pub fn new(dim: usize) -> Self {
+        let chunk_dim = dim / CHUNK_SIZE;
         Self {
             dim,
-            chunk_dim: dim / CHUNK_SIZE,
-            chunks: HashMap::new(),
+            chunk_dim,
+            chunks: vec![vec![vec![gen_air_chunk(); chunk_dim]; chunk_dim]; chunk_dim],
+            generated_chunks: vec![vec![vec![false; chunk_dim]; chunk_dim]; chunk_dim],
             genned_objects: Vec::new(),
         }
+    }
+
+    pub fn is_chunk_genned(&self, chunk_pos: UVec3) -> bool {
+        self.generated_chunks[chunk_pos.x as usize][chunk_pos.y as usize][chunk_pos.z as usize]
     }
 
     pub fn to_chunk_pos(&self, pos: Vec3) -> UVec3 {
@@ -58,31 +62,19 @@ impl World {
         )
     }
 
-    pub fn get_voxel(&self, pos: Vec3) -> GetVoxelResult {
+    pub fn get_voxel(&self, pos: Vec3) -> Block {
         if !self.is_in_bounds(pos) {
-            return GetVoxelResult::NoVoxel;
+            return AIR;
         }
         let chunk_pos = self.to_chunk_pos(pos);
 
-        // Check if there's an entry in the dictionary for the chunk
-        if let Some(chunk) = self.chunks.get(&chunk_pos) {
-            let pos_in_chunk = pos.as_uvec3() - self.get_chunk_world_pos(chunk_pos).as_uvec3();
-            if let Some(chunk) = chunk {
-                if let Some(block) =
-                    chunk[pos_in_chunk.x as usize][pos_in_chunk.y as usize][pos_in_chunk.z as usize]
-                {
-                    return GetVoxelResult::Voxel { block };
-                } else {
-                    return GetVoxelResult::NoVoxel;
-                }
-            }
-        } else {
-            return GetVoxelResult::ChunkNotGenerated;
-        }
-        GetVoxelResult::NoVoxel
+        // Check if there's a chunk at the position
+        let chunk = &self.chunks[chunk_pos.x as usize][chunk_pos.y as usize][chunk_pos.z as usize];
+        let pos_in_chunk = pos.as_uvec3() - self.get_chunk_world_pos(chunk_pos).as_uvec3();
+        chunk[pos_in_chunk.x as usize][pos_in_chunk.y as usize][pos_in_chunk.z as usize]
     }
 
-    pub fn set_voxel(&mut self, pos: Vec3, color: Color) {
+    pub fn set_voxel(&mut self, pos: Vec3, block: Block) {
         if !self.is_in_bounds(pos) {
             return;
         }
@@ -90,19 +82,9 @@ impl World {
         let pos_in_chunk = pos.as_uvec3()
             - chunk_pos * UVec3::new(CHUNK_SIZE as u32, CHUNK_SIZE as u32, CHUNK_SIZE as u32);
 
-        if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
-            if let Some(chunk) = chunk {
-                // If the chunk exists, set the voxel
-                chunk[pos_in_chunk.x as usize][pos_in_chunk.y as usize][pos_in_chunk.z as usize] =
-                    Some(color);
-            }
-        } else {
-            // If the chunk does not exist, create it and set the voxel
-            let mut new_chunk = Self::gen_empty_voxel_array(CHUNK_SIZE);
-            new_chunk[pos_in_chunk.x as usize][pos_in_chunk.y as usize][pos_in_chunk.z as usize] =
-                Some(color);
-            self.chunks.insert(chunk_pos, Some(new_chunk));
-        }
+        let chunk =
+            &mut self.chunks[chunk_pos.x as usize][chunk_pos.y as usize][chunk_pos.z as usize];
+        chunk[pos_in_chunk.x as usize][pos_in_chunk.y as usize][pos_in_chunk.z as usize] = block;
     }
 
     pub fn is_in_bounds(&self, pos: Vec3) -> bool {
@@ -112,6 +94,12 @@ impl World {
             && pos.y < self.dim as f32
             && pos.z >= 0.0
             && pos.z < self.dim as f32
+    }
+
+    pub fn is_in_chunk_bounds(&self, chunk_pos: UVec3) -> bool {
+        chunk_pos.x < self.chunk_dim as u32
+            && chunk_pos.y < self.chunk_dim as u32
+            && chunk_pos.z < self.chunk_dim as u32
     }
 
     pub fn get_center(&self) -> Vec3 {
@@ -124,11 +112,15 @@ impl World {
 
     pub fn reset(&mut self) {
         self.genned_objects.clear();
-        self.chunks.clear();
+        self.chunks = vec![
+            vec![vec![gen_air_chunk(); self.chunk_dim]; self.chunk_dim];
+            self.chunk_dim
+        ];
+        self.generated_chunks = vec![vec![vec![false; self.chunk_dim]; self.chunk_dim]; self.chunk_dim];
     }
 
-    pub fn gen_empty_voxel_array(dim: usize) -> Vec<Vec<Vec<Option<Color>>>> {
-        vec![vec![vec![None; dim]; dim]; dim]
+    pub fn gen_empty_voxel_array(dim: usize) -> Vec<Vec<Vec<Block>>> {
+        vec![vec![vec![AIR; dim]; dim]; dim]
     }
 
     pub fn gen_cube(&mut self, pos: Vec3, size: Vec3, block: Color) {
@@ -177,8 +169,8 @@ impl World {
     }
 
     pub fn gen_sin_terrain(&mut self, chunk_pos: UVec3) {
-        // skip if the chunk is already generated
-        if self.chunks.contains_key(&chunk_pos) {
+        // bail if already generated
+        if self.generated_chunks[chunk_pos.x as usize][chunk_pos.y as usize][chunk_pos.z as usize] {
             return;
         }
 
@@ -224,11 +216,13 @@ impl World {
                 }
             }
         }
+
+        self.generated_chunks[chunk_pos.x as usize][chunk_pos.y as usize][chunk_pos.z as usize] = true;
     }
 
     pub fn gen_terrain(&mut self, chunk_pos: UVec3) {
-        // Skip if the chunk is already generated
-        if self.chunks.contains_key(&chunk_pos) {
+        // bail if already generated
+        if self.generated_chunks[chunk_pos.x as usize][chunk_pos.y as usize][chunk_pos.z as usize] {
             return;
         }
 
@@ -257,7 +251,7 @@ impl World {
                 let world_y = base_pos.y + y_offset as f32;
 
                 // Set the block green, and all blocks down to the floor brown
-                let gentle_green = Color::new(56, 183, 100, 255);
+                let gentle_green = Color::new(56, 183, 100, 100);
                 self.set_voxel(Vec3::new(world_x, world_y, world_z), gentle_green);
 
                 // Fill to the floor with brown
@@ -269,6 +263,8 @@ impl World {
                 }
             }
         }
+
+        self.generated_chunks[chunk_pos.x as usize][chunk_pos.y as usize][chunk_pos.z as usize] = true;
     }
 
     pub fn get_floor_level(&self) -> usize {
